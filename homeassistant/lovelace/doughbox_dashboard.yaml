@@ -1,0 +1,14 @@
+views:
+  - path: html
+    panel: true
+    cards:
+      - type: iframe
+        url: /local/htmldoughbox.html?v=1
+        aspect_ratio: '100'
+        card_mod:
+          style: |
+            iframe {
+              height: 100vh !important;
+              width: 100% !important;
+            }
+    type: panel
