@@ -1,0 +1,301 @@
+- id: '1776472713116'
+  alias: Unlock Fire Tablet
+  triggers:
+  - topic: fully/fire_tablet/event
+    value_template: '{{ value_json.event }}'
+    payload: screenOn
+    trigger: mqtt
+  actions:
+  - delay:
+      seconds: 1
+  - action: shell_command.unlock_fire_tablet
+  mode: restart
+- id: '1776500000001'
+  alias: Doughbox - Over-temperature Alert
+  description: Fires when ESPHome firmware declares box above 30C. Critical iOS push bypasses DND.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.doughbox_over_temperature
+    to: 'on'
+  conditions: []
+  actions:
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\u26A0\uFE0F Doughbox over-temperature"
+      message: >
+        Box temp {{ states('sensor.doughbox_temperature_average') | float | round(2) }}°C —
+        all loads cut by firmware. Check immediately.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+        tag: doughbox-overtemp
+  mode: single
+
+- id: '1776500000002'
+  alias: Doughbox - Over-temperature Persistent Alert
+  description: Re-notifies if box remains above 30C for 5 minutes after first alert.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.doughbox_over_temperature
+    to: 'on'
+    for:
+      minutes: 5
+  conditions: []
+  actions:
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\U0001F6A8 Doughbox STILL over-temperature"
+      message: >
+        Box has been above 30°C for 5+ minutes.
+        Currently {{ states('sensor.doughbox_temperature_average') | float | round(2) }}°C.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+        tag: doughbox-overtemp
+  mode: single
+
+- id: '1776500000003'
+  alias: Doughbox - Over-temperature Cleared
+  description: Sends an all-clear and dismisses the lock screen alert when temp returns to safe.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.doughbox_over_temperature
+    to: 'off'
+  conditions: []
+  actions:
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\u2705 Doughbox temperature normal"
+      message: >
+        Box temp back to {{ states('sensor.doughbox_temperature_average') | float | round(2) }}°C.
+      data:
+        tag: doughbox-overtemp
+  mode: single
+- id: 'doughbox-controller-online-restore'
+  alias: Doughbox - Controller Online Mode Restore
+  description: >
+    When the controller reconnects, HA pushes the current desired phase back
+    via MQTT cmd. HA is the authoritative source of truth for running mode.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.doughbox_status
+    to: 'on'
+    from:
+    - 'off'
+    - unavailable
+    - unknown
+  conditions: []
+  actions:
+  - delay:
+      seconds: 3
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: Cold Ferment
+      sequence:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_cold_ferment_temp') | float }},
+             "high":{{ (states('input_number.doughbox_cold_ferment_temp') | float) + 2 }}}
+          retain: false
+      - action: notify.mobile_app_jasons_iphone
+        data:
+          title: "\U0001F504 Doughbox Reconnected"
+          message: >
+            Controller back online — Cold Ferment restored at
+            {{ states('input_number.doughbox_cold_ferment_temp') }}°C.
+          data:
+            tag: doughbox-reconnect
+    - conditions:
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: Warm Proof
+      sequence:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+             "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+          retain: false
+      - action: notify.mobile_app_jasons_iphone
+        data:
+          title: "\U0001F504 Doughbox Reconnected"
+          message: >
+            Controller back online — Room Temp Proof restored at
+            {{ states('input_number.doughbox_warm_proof_temp') }}°C.
+          data:
+            tag: doughbox-reconnect
+    default:
+    - action: mqtt.publish
+      data:
+        topic: doughbox/cmd
+        payload: '{"cmd":"stop"}'
+        retain: false
+  mode: single
+
+- id: 'doughbox-climate-mismatch-watchdog'
+  alias: Doughbox - Climate Mode Mismatch
+  description: >
+    Detects when the climate entity silently drops to off while a ferment
+    phase is active. Auto-corrects via MQTT and notifies.
+  triggers:
+  - trigger: state
+    entity_id: climate.doughbox_climate
+    to: 'off'
+    for:
+      minutes: 2
+  conditions:
+  - condition: or
+    conditions:
+    - condition: state
+      entity_id: input_select.doughbox_current_phase
+      state: Cold Ferment
+    - condition: state
+      entity_id: input_select.doughbox_current_phase
+      state: Warm Proof
+  actions:
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: Cold Ferment
+      sequence:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_cold_ferment_temp') | float }},
+             "high":{{ (states('input_number.doughbox_cold_ferment_temp') | float) + 2 }}}
+          retain: false
+    - conditions:
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: Warm Proof
+      sequence:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+             "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+          retain: false
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\u26A0\uFE0F Doughbox Climate Mismatch"
+      message: >
+        Phase is {{ states('input_select.doughbox_current_phase') }} but
+        climate was off for 2+ minutes. Mode auto-restored.
+        Box temp: {{ states('sensor.doughbox_temperature_average') }}°C.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+        tag: doughbox-mismatch
+  mode: single
+
+- id: 'doughbox-controller-offline-alert'
+  alias: Doughbox - Controller Offline During Ferment
+  description: >
+    Sends a critical push if the controller goes offline for 5+ minutes
+    while a ferment is in progress. Controller runs autonomously but
+    you need to know.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.doughbox_status
+    to:
+    - 'off'
+    - unavailable
+    for:
+      minutes: 5
+  conditions:
+  - condition: or
+    conditions:
+    - condition: state
+      entity_id: input_select.doughbox_current_phase
+      state: Cold Ferment
+    - condition: state
+      entity_id: input_select.doughbox_current_phase
+      state: Warm Proof
+  actions:
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\U0001F4E1 Doughbox Controller Offline"
+      message: >
+        Controller offline for 5+ minutes during
+        {{ states('input_select.doughbox_current_phase') }}.
+        Last known box temp: {{ states('sensor.doughbox_temperature_average') }}°C.
+        Running autonomously on last saved mode.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+        tag: doughbox-offline
+  mode: single
+
+- id: 'doughbox-sensor-failure-alert'
+  alias: Doughbox - BME280 Sensor Failure
+  description: >
+    Critical push when both BME280s fail for 30s and all loads are cut.
+  triggers:
+  - trigger: mqtt
+    topic: doughbox/alert
+    value_template: "{{ value_json.type }}"
+    payload: sensor_fail
+  conditions: []
+  actions:
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\U0001F6A8 Doughbox Sensor Failure"
+      message: >
+        Both BME280 sensors failed for 30+ seconds.
+        All loads have been cut as a safety measure.
+        Phase: {{ states('input_select.doughbox_current_phase') }}.
+        Check controller immediately.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+        tag: doughbox-sensor-fail
+  mode: single
+
+- id: 'doughbox-sensor-recovery-alert'
+  alias: Doughbox - BME280 Sensor Recovery
+  description: >
+    Notifies when BME280 sensors recover after a failure.
+  triggers:
+  - trigger: mqtt
+    topic: doughbox/alert
+    value_template: "{{ value_json.type }}"
+    payload: sensor_recovery
+  conditions: []
+  actions:
+  - action: notify.mobile_app_jasons_iphone
+    data:
+      title: "\u2705 Doughbox Sensors Recovered"
+      message: >
+        BME280 sensors are reading again. Climate control is NOT
+        automatically restarted — check the dashboard and restart
+        manually if a ferment is in progress.
+      data:
+        tag: doughbox-sensor-fail
+  mode: single
