@@ -169,13 +169,13 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     lambda: |-
-      if (id(dough_temp_1).has_state() && id(dough_temp_2).has_state()) {
-        return (id(dough_temp_1).state + id(dough_temp_2).state) / 2.0;
-      } else if (id(dough_temp_1).has_state()) {
-        return id(dough_temp_1).state;
-      } else if (id(dough_temp_2).has_state()) {
-        return id(dough_temp_2).state;
-      }
+      float t1 = id(dough_temp_1).has_state() ? id(dough_temp_1).state : NAN;
+      float t2 = id(dough_temp_2).has_state() ? id(dough_temp_2).state : NAN;
+      bool ok1 = !std::isnan(t1);
+      bool ok2 = !std::isnan(t2);
+      if (ok1 && ok2) return (t1 + t2) / 2.0f;
+      if (ok1) return t1;
+      if (ok2) return t2;
       return NAN;
     update_interval: 5s
 
@@ -186,13 +186,13 @@ sensor:
     accuracy_decimals: 0
     icon: "mdi:water-percent"
     lambda: |-
-      if (id(dough_humidity_1).has_state() && id(dough_humidity_2).has_state()) {
-        return (id(dough_humidity_1).state + id(dough_humidity_2).state) / 2.0;
-      } else if (id(dough_humidity_1).has_state()) {
-        return id(dough_humidity_1).state;
-      } else if (id(dough_humidity_2).has_state()) {
-        return id(dough_humidity_2).state;
-      }
+      float h1 = id(dough_humidity_1).has_state() ? id(dough_humidity_1).state : NAN;
+      float h2 = id(dough_humidity_2).has_state() ? id(dough_humidity_2).state : NAN;
+      bool ok1 = !std::isnan(h1);
+      bool ok2 = !std::isnan(h2);
+      if (ok1 && ok2) return (h1 + h2) / 2.0f;
+      if (ok1) return h1;
+      if (ok2) return h2;
       return NAN;
     update_interval: 5s
 
@@ -203,9 +203,9 @@ sensor:
     accuracy_decimals: 1
     icon: "mdi:thermometer-lines"
     lambda: |-
-      if (id(dough_temp_1).has_state() && id(dough_temp_2).has_state()) {
-        return id(dough_temp_1).state - id(dough_temp_2).state;
-      }
+      float t1 = id(dough_temp_1).has_state() ? id(dough_temp_1).state : NAN;
+      float t2 = id(dough_temp_2).has_state() ? id(dough_temp_2).state : NAN;
+      if (!std::isnan(t1) && !std::isnan(t2)) return t1 - t2;
       return NAN;
     update_interval: 5s
 
