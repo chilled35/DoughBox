@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=1280, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Doughbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#030d14;
+  --s1:#050f18;
+  --s2:#071520;
+  --s3:#0a2030;
+  --s4:#0e3348;
+  --teal:#00e5cc;
+  --teal-dim:rgba(0,229,204,0.1);
+  --teal-border:rgba(0,229,204,0.3);
+  --green:#00ff87;
+  --green-dim:rgba(0,255,135,0.1);
+  --green-border:rgba(0,255,135,0.3);
+  --purple:#7b5ea7;
+  --purple-dim:rgba(123,94,167,0.12);
+  --purple-border:rgba(123,94,167,0.35);
+  --red:#ff4444;
+  --red-dim:rgba(255,68,68,0.1);
+  --amber:#00e5cc;
+  --text:#a0d4e0;
+  --text-mid:#3a6a80;
+  --text-dim:#0e3348;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg)}
+body{
+  color:var(--text);
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13px;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none;
+}
+
+/* ══════════════════════════════════════════
+   NORMAL LAYOUT  1280×800
+   52px top | 1fr main | 50px bottom
+   left panel 380px | chart 1fr
+══════════════════════════════════════════ */
+#app{
+  display:grid;
+  grid-template-rows:52px 1fr 50px;
+  height:100vh;width:100vw;
+}
+
+/* ── TOP BAR ────────────────────────────── */
+#status-bar{
+  display:flex;align-items:center;
+  padding:0 20px;gap:18px;
+  background:var(--s1);
+  border-bottom:1px solid var(--s3);
+}
+.phase-badge{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:22px;letter-spacing:0.12em;
+  padding:4px 16px;
+  border:2px solid currentColor;
+  border-radius:2px;flex-shrink:0;transition:all 0.3s;
+}
+.phase-badge.idle    {color:var(--text-dim);border-color:var(--s3)}
+.phase-badge.cold    {color:var(--teal);border-color:var(--teal);background:var(--teal-dim)}
+.phase-badge.warm    {color:var(--green);border-color:var(--green);background:var(--green-dim)}
+.phase-badge.complete{color:var(--purple);border-color:var(--purple);background:var(--purple-dim)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+.phase-badge.cold::before,.phase-badge.warm::before{
+  content:'● ';font-size:10px;color:var(--teal);
+  animation:blink 2s ease-in-out infinite;
+}
+
+.time-block{display:flex;align-items:baseline;gap:10px}
+.time-remaining{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:30px;letter-spacing:0.03em;
+  color:var(--teal);line-height:1;
+}
+.time-label{font-size:11px;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase}
+
+.status-indicators{margin-left:auto;display:flex;gap:28px;align-items:center;padding-right:6px}
+.indicator{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-mid);letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:all 0.3s;background:var(--s3)}
+.dot.on  {background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off {background:var(--red)}
+.dot.warn{background:#ff9900;animation:blink 1s infinite}
+
+/* ── MAIN ───────────────────────────────── */
+#main{display:grid;grid-template-columns:380px 1fr;overflow:hidden}
+
+/* ── LEFT PANEL ─────────────────────────── */
+#left-panel{
+  display:flex;flex-direction:column;
+  padding:12px;gap:9px;
+  border-right:1px solid var(--s3);
+  background:var(--s1);
+  overflow:hidden;
+}
+
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0}
+.big-stat{
+  background:var(--bg);
+  border:1px solid var(--s3);
+  border-radius:2px;
+  padding:12px 10px 10px;
+  display:flex;flex-direction:column;
+  position:relative;
+}
+.big-stat-accent{position:absolute;top:0;left:0;right:0;height:2px;background:currentColor;opacity:0.5}
+.big-stat-val{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:46px;line-height:1;letter-spacing:0.01em;
+}
+.big-stat-lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-mid);margin-top:6px;font-weight:700}
+.big-stat-sub{font-size:11px;color:var(--text-dim);margin-top:2px}
+
+.sep{height:1px;background:var(--s3);flex-shrink:0}
+
+.power-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg);border:1px solid var(--s3);border-radius:2px;
+  padding:12px 16px;flex-shrink:0;
+}
+.power-label{
+  font-family:'Bebas Neue',sans-serif;font-size:18px;
+  letter-spacing:0.1em;color:var(--text-mid);
+}
+.toggle{position:relative;width:56px;height:30px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{
+  position:absolute;inset:0;background:var(--s3);
+  border:1px solid var(--s4);border-radius:15px;cursor:pointer;transition:all 0.2s;
+}
+.toggle input:checked+.toggle-track{background:var(--teal-dim);border-color:var(--teal)}
+.toggle-track::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:22px;height:22px;background:var(--s4);border-radius:50%;transition:all 0.2s;
+}
+.toggle input:checked+.toggle-track::after{transform:translateX(26px);background:var(--teal)}
+
+.section-lbl{
+  font-size:9px;text-transform:uppercase;letter-spacing:0.18em;
+  color:var(--text-dim);font-weight:700;flex-shrink:0;
+}
+.section-lbl::before{content:'// '}
+
+.btn{
+  border:1px solid transparent;border-radius:2px;cursor:pointer;
+  font-family:'Bebas Neue',sans-serif;
+  font-size:17px;letter-spacing:0.1em;
+  padding:11px 14px;
+  display:flex;align-items:center;gap:10px;width:100%;
+  transition:all 0.1s;min-height:50px;flex-shrink:0;
+}
+.btn:active{opacity:0.7;transform:scale(0.98)}
+.btn:disabled{opacity:0.2;cursor:not-allowed}
+.btn-icon{font-size:16px;flex-shrink:0}
+
+.btn-start{background:var(--teal-dim);color:var(--teal);border-color:var(--teal-border)}
+.btn-skip {background:var(--green-dim);color:var(--green);border-color:var(--green-border)}
+.btn-stop {background:var(--red-dim);color:var(--red);border-color:rgba(255,68,68,0.35)}
+
+.manual-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;flex-shrink:0}
+.manual-row .btn{font-size:14px;padding:9px 4px;flex-direction:column;gap:3px;text-align:center;justify-content:center;align-items:center;min-height:56px}
+.manual-row .btn-icon{font-size:18px}
+.btn-cold{background:var(--teal-dim);color:var(--teal);border-color:var(--teal-border)}
+.btn-warm{background:var(--green-dim);color:var(--green);border-color:var(--green-border)}
+.btn-off {background:var(--s2);color:var(--text-dim);border-color:var(--s3)}
+.btn-details{
+  background:var(--bg);color:var(--text-mid);border-color:var(--s3);
+  justify-content:center;text-align:center;margin-top:auto;font-size:14px;
+}
+
+/* ── RIGHT PANEL: CHART ──────────────────── */
+#right-panel{
+  position:relative;overflow:hidden;
+  padding:10px;background:var(--bg);
+}
+.chart-legend{
+  position:absolute;top:14px;right:16px;
+  display:flex;gap:16px;align-items:center;z-index:5;
+}
+.legend-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-mid);font-weight:600;letter-spacing:0.06em}
+.legend-swatch{width:22px;height:3px;border-radius:2px}
+#mainChart{display:block;width:100%;height:100%}
+.no-data{
+  display:none;align-items:center;justify-content:center;
+  position:absolute;inset:0;
+  color:var(--text-dim);font-size:12px;letter-spacing:0.14em;text-transform:uppercase;
+}
+
+/* ── BOTTOM BAR ──────────────────────────── */
+#diag-bar{
+  display:flex;align-items:center;justify-content:space-around;
+  padding:0 20px;
+  background:var(--s1);border-top:1px solid var(--s3);
+}
+.status-block{display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.status-block-val{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:0.06em}
+.status-block-lbl{font-size:8px;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-dim);margin-top:2px}
+
+
+/* ══════════════════════════════════════════
+   KIOSK MODE  1280×800
+   90px top | 160px stats | 1fr chart
+══════════════════════════════════════════ */
+#kiosk{
+  display:none;position:fixed;inset:0;
+  background:var(--bg);z-index:9999;
+  flex-direction:column;cursor:pointer;
+}
+#kiosk::after{
+  content:'// TAP TO INTERACT //';
+  position:absolute;bottom:8px;right:18px;
+  font-size:9px;letter-spacing:0.2em;color:var(--s3);
+  pointer-events:none;
+}
+
+#k-top{
+  display:flex;align-items:center;
+  padding:0 32px;gap:36px;
+  height:100px;
+  border-bottom:1px solid var(--s3);
+  flex-shrink:0;
+  background:var(--s1);
+}
+.k-phase{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:36px;letter-spacing:0.14em;text-transform:uppercase;
+  padding:6px 22px;border:2px solid var(--s3);
+  border-radius:2px;flex-shrink:0;transition:all 0.3s;line-height:1;
+}
+.k-phase.idle    {color:var(--text-dim);border-color:var(--s3)}
+.k-phase.cold    {color:var(--teal);border-color:var(--teal);background:var(--teal-dim)}
+.k-phase.warm    {color:var(--green);border-color:var(--green);background:var(--green-dim)}
+.k-phase.complete{color:var(--purple);border-color:var(--purple);background:var(--purple-dim)}
+.k-phase.cold::before,.k-phase.warm::before{content:'● ';font-size:12px;color:var(--teal);animation:blink 2s infinite}
+
+#k-time{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:44px;letter-spacing:0.02em;
+  color:var(--teal);line-height:1;
+}
+#k-time-lbl{display:none}
+
+#k-dots{margin-left:auto;display:flex;gap:36px;align-items:center}
+.k-indicator{display:flex;align-items:center;gap:14px;font-size:20px;color:var(--text-mid);letter-spacing:0.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
+.k-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0;transition:all 0.3s;background:var(--s3)}
+.k-dot.on  {background:var(--green);box-shadow:0 0 14px var(--green)}
+.k-dot.off {background:var(--red)}
+.k-dot.warn{background:#ff9900;animation:blink 1s infinite}
+
+#k-stats{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  border-bottom:1px solid var(--s3);
+  flex-shrink:0;height:180px;
+}
+.k-stat{
+  display:flex;flex-direction:column;justify-content:center;
+  padding:0 28px;gap:4px;
+  border-right:1px solid var(--s3);
+}
+.k-stat:last-child{border-right:none}
+.k-stat-val{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:108px;letter-spacing:0.01em;line-height:0.9;
+}
+.k-stat-meta{display:flex;flex-direction:row;align-items:baseline;gap:12px}
+.k-stat-label{font-size:18px;text-transform:uppercase;letter-spacing:0.14em;color:var(--text-mid);font-weight:700;white-space:nowrap}
+.k-stat-sub{font-size:14px;color:var(--text-dim);letter-spacing:0.04em;white-space:nowrap}
+
+#k-chart-wrap{
+  flex:1;min-height:0;position:relative;
+  padding:8px 10px;
+}
+#k-chart-legend{
+  position:absolute;top:14px;right:18px;
+  display:flex;gap:18px;align-items:center;z-index:5;
+}
+.k-legend-item{display:flex;align-items:center;gap:9px;font-size:20px;color:var(--text-mid);font-weight:700;letter-spacing:0.08em}
+.k-legend-swatch{width:32px;height:4px;border-radius:2px}
+#kioskChart{display:block;width:100%;height:100%}
+
+/* idle bar */
+#idle-bar{
+  position:fixed;bottom:0;left:0;height:2px;
+  background:var(--teal);opacity:0.4;
+  z-index:49;pointer-events:none;
+}
+
+/* ── OVER-TEMPERATURE BANNER ─────────────── */
+#overtemp-banner{
+  display:none;
+  position:fixed;top:0;left:0;right:0;
+  z-index:99999;
+  background:#cc0000;
+  padding:0 20px;
+  height:48px;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  border-bottom:2px solid #ff4444;
+}
+#overtemp-banner.active{display:flex}
+@keyframes overtempPulse{0%,100%{background:#cc0000}50%{background:#aa0000}}
+#overtemp-banner.active{animation:overtempPulse 1.5s ease-in-out infinite}
+.overtemp-text{
+  display:flex;align-items:center;gap:12px;
+  font-family:'Bebas Neue',sans-serif;font-size:22px;
+  letter-spacing:0.14em;color:#fff;white-space:nowrap;
+}
+.overtemp-temp{
+  font-family:'Bebas Neue',sans-serif;font-size:22px;
+  letter-spacing:0.06em;color:#ffaaaa;
+}
+.overtemp-dismiss{
+  font-family:'Bebas Neue',sans-serif;font-size:14px;
+  letter-spacing:0.1em;color:rgba(255,255,255,0.6);
+  background:none;border:1px solid rgba(255,255,255,0.3);
+  border-radius:2px;padding:4px 12px;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;
+}
+.overtemp-dismiss:active{opacity:0.7}
+/* push app and kiosk down when banner is active */
+#app.overtemp-shift{
+  margin-top:48px;
+  height:calc(100vh - 48px);
+}
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.92);
+  display:flex;align-items:center;justify-content:center;
+  z-index:100;backdrop-filter:blur(4px);
+  opacity:0;pointer-events:none;transition:opacity 0.2s;
+}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{
+  background:var(--s1);border:1px solid var(--s3);border-radius:4px;
+  padding:22px;max-width:360px;width:90%;
+  transform:translateY(8px);transition:transform 0.2s;
+}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal-large{max-width:960px;width:96%;max-height:92vh;overflow-y:auto;padding:20px 24px;position:relative}
+.modal h3{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.1em;margin-bottom:10px;color:var(--teal)}
+.modal p{color:var(--text-mid);font-size:12px;line-height:1.6;margin-bottom:16px}
+.modal-buttons{display:flex;gap:8px;margin-top:18px}
+.modal-buttons button{
+  flex:1;border:1px solid var(--s3);border-radius:2px;cursor:pointer;
+  font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:0.08em;
+  padding:12px;transition:all 0.12s;
+}
+.modal-cancel {background:var(--s2);color:var(--text-mid)}
+.modal-confirm{background:var(--green-dim);color:var(--green);border-color:var(--green-border)}
+.modal-close{
+  position:absolute;top:14px;right:14px;
+  background:var(--s2);border:1px solid var(--s3);border-radius:2px;
+  width:32px;height:32px;cursor:pointer;color:var(--text-mid);
+  font-size:18px;display:flex;align-items:center;justify-content:center;
+}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+.detail-section{background:var(--s2);border:1px solid var(--s3);border-radius:2px;padding:14px}
+.detail-section h4{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:0.12em;color:var(--text-dim);margin-bottom:10px}
+.schedule-block{display:flex;flex-direction:column;gap:8px}
+.schedule-row{display:flex;flex-direction:column;gap:3px}
+.schedule-row label{font-size:10px;color:var(--text-mid);letter-spacing:0.05em;text-transform:uppercase;font-weight:600}
+.input-group input[type="datetime-local"]{
+  background:var(--bg);border:1px solid var(--s3);border-radius:2px;
+  color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;
+  padding:8px;width:100%;
+}
+.input-group input:focus{outline:none;border-color:var(--teal)}
+.num-box{display:flex;align-items:center;background:var(--bg);border:1px solid var(--s3);border-radius:2px;overflow:hidden;width:100%}
+.num-box button{background:none;border:none;color:var(--text-mid);cursor:pointer;font-size:20px;padding:8px 13px;flex-shrink:0}
+.num-box button:active{background:var(--s3)}
+.num-box input{background:none;border:none;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:center;flex:1;min-width:0;outline:none;padding:8px 0}
+.num-box .unit{font-size:10px;color:var(--text-dim);padding-right:8px;white-space:nowrap}
+.run-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+.run-stat{background:var(--bg);border:1px solid var(--s3);padding:8px 10px}
+.run-stat-val{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:0.04em;line-height:1;color:var(--text)}
+.run-stat-lbl{font-size:8px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim);margin-top:3px;font-weight:600}
+.run-stat-sub{font-size:9px;color:var(--text-dim);margin-top:2px}
+.btn-defaults{
+  border:1px solid var(--s3);border-radius:2px;cursor:pointer;
+  font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:0.1em;
+  padding:10px;background:var(--s2);color:var(--text-dim);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;margin-top:10px;text-transform:uppercase;
+}
+
+/* ── TOAST ─────────────────────────────── */
+#toast{
+  position:fixed;bottom:60px;left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:var(--s1);border:1px solid var(--teal-border);border-radius:2px;
+  padding:10px 26px;
+  font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:0.14em;
+  color:var(--teal);
+  opacity:0;transition:all 0.25s;pointer-events:none;z-index:200;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── CONFIG BAR ─────────────────────────── */
+#config-bar{
+  position:fixed;top:0;left:0;right:0;
+  background:var(--s1);border-bottom:1px solid var(--s3);
+  padding:10px 16px;display:none;
+  align-items:center;gap:10px;flex-wrap:wrap;z-index:1000;
+}
+#config-bar label{color:var(--text-dim);font-size:11px;white-space:nowrap;letter-spacing:0.08em}
+#config-bar input{
+  background:var(--bg);border:1px solid var(--s3);border-radius:2px;
+  color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:11px;
+  padding:5px 8px;flex:1;min-width:200px;
+}
+#config-bar button{
+  background:var(--teal);border:none;border-radius:2px;color:#000;cursor:pointer;
+  font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:0.08em;
+  padding:6px 18px;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+
+<div id="config-bar">
+  <label>// HA LONG-LIVED ACCESS TOKEN //</label>
+  <input type="password" id="ha-token-manual" placeholder="eyJ0eXAiOiJKV1Qi...">
+  <button onclick="manualConnect()">Connect</button>
+</div>
+
+<!-- ══ OVER-TEMPERATURE BANNER ════════════ -->
+<div id="overtemp-banner">
+  <div class="overtemp-text">
+    ⚠ OVER-TEMPERATURE — ALL LOADS CUT
+    <span class="overtemp-temp" id="overtemp-reading"></span>
+  </div>
+  <button class="overtemp-dismiss" onclick="dismissOvertemp()">Acknowledge</button>
+</div>
+
+<!-- ══ NORMAL LAYOUT ══════════════════════ -->
+<div id="app">
+  <div id="status-bar">
+    <div class="phase-badge idle" id="phase-badge">IDLE</div>
+    <div class="time-block">
+      <div class="time-remaining" id="time-remaining">--:--</div>
+      <div class="time-label" id="time-label">waiting</div>
+    </div>
+    <div class="status-indicators">
+      <div class="indicator"><div class="dot" id="dot-power"></div>PWR</div>
+      <div class="indicator"><div class="dot" id="dot-esp"></div>ESP</div>
+      <div class="indicator"><div class="dot" id="dot-comp"></div>COMP</div>
+      <div class="indicator"><div class="dot" id="dot-heat"></div>HEAT</div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="left-panel">
+      <div class="stats-row">
+        <div class="big-stat" style="color:var(--teal)">
+          <div class="big-stat-accent"></div>
+          <div class="big-stat-val" id="stat-box">--.-°</div>
+          <div class="big-stat-lbl">Box Temp</div>
+          <div class="big-stat-sub" id="stat-box-target">tgt --</div>
+        </div>
+        <div class="big-stat" style="color:var(--green)">
+          <div class="big-stat-accent"></div>
+          <div class="big-stat-val" id="stat-dough">--.-°</div>
+          <div class="big-stat-lbl">Dough</div>
+          <div class="big-stat-sub" id="stat-dough-delta">Δ --</div>
+        </div>
+        <div class="big-stat" style="color:var(--purple)">
+          <div class="big-stat-accent"></div>
+          <div class="big-stat-val" id="stat-hum">--%</div>
+          <div class="big-stat-lbl">Humidity</div>
+          <div class="big-stat-sub" id="stat-hum-target">tgt --</div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="power-row">
+        <div class="power-label">Doughbox Power</div>
+        <label class="toggle">
+          <input type="checkbox" id="power-toggle" onchange="togglePower(this.checked)">
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="section-lbl">Fermentation</div>
+      <button class="btn btn-start" id="btn-start" onclick="callScript('doughbox_start_fermentation')">
+        <span class="btn-icon">▶</span>Start Cold Ferment
+      </button>
+      <button class="btn btn-skip" id="btn-skip" onclick="callScript('doughbox_skip_to_room_temp_proof')">
+        <span class="btn-icon">⏭</span>Skip to RT Proof
+      </button>
+      <button class="btn btn-stop" id="btn-stop" onclick="callScript('doughbox_stop')" style="display:none">
+        <span class="btn-icon">⏹</span>Stop Fermentation
+      </button>
+      <div class="sep"></div>
+      <div class="section-lbl">Manual Climate</div>
+      <div class="manual-row">
+        <button class="btn btn-cold" onclick="setClimate('heat_cool',2,4)"><span class="btn-icon">❄</span>2–4°</button>
+        <button class="btn btn-warm" onclick="setClimate('heat_cool',23,25)"><span class="btn-icon">🌡</span>23–25°</button>
+        <button class="btn btn-off"  onclick="setClimate('off',0,0)"><span class="btn-icon">○</span>Off</button>
+      </div>
+      <button class="btn btn-details" onclick="openDetails()">
+        <span class="btn-icon">📊</span>Schedule &amp; Stats
+      </button>
+    </div>
+
+    <div id="right-panel">
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--teal)"></div>BOX</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div>DOUGH</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--purple)"></div>HUMID</div>
+      </div>
+      <canvas id="mainChart"></canvas>
+      <div class="no-data" id="chart-no-data">// NO DATA — CONNECT TO HOME ASSISTANT //</div>
+    </div>
+  </div>
+
+  <div id="diag-bar">
+    <div class="status-block"><div class="status-block-val" id="d-target" style="color:var(--text)">--/--</div><div class="status-block-lbl">Target °C</div></div>
+    <div class="status-block"><div class="status-block-val" id="d-action" style="color:var(--text)">--</div><div class="status-block-lbl">HVAC Action</div></div>
+    <div class="status-block"><div class="status-block-val" id="d-relays" style="color:var(--text-dim)">ALL OFF</div><div class="status-block-lbl">Active Relays</div></div>
+    <div class="status-block"><div class="status-block-val" id="d-cost" style="color:var(--green)">£--.--</div><div class="status-block-lbl">Run Cost 72h</div></div>
+    <div class="status-block"><div class="status-block-val" id="d-rate" style="color:var(--text-dim)">--p</div><div class="status-block-lbl">Rate /kWh</div></div>
+  </div>
+</div>
+
+<!-- ══ KIOSK LAYOUT ════════════════════════ -->
+<div id="kiosk">
+  <!-- Kiosk over-temperature banner — mirrors the main banner, lives inside kiosk -->
+  <div id="k-overtemp-banner" style="display:none;align-items:center;justify-content:space-between;padding:0 28px;height:52px;background:#cc0000;border-bottom:2px solid #ff4444;flex-shrink:0;gap:16px;animation:overtempPulse 1.5s ease-in-out infinite">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.14em;color:#fff;white-space:nowrap">
+      ⚠ OVER-TEMPERATURE — ALL LOADS CUT &nbsp;<span id="k-overtemp-reading" style="color:#ffaaaa;font-size:22px"></span>
+    </div>
+    <button onclick="dismissOvertemp()" style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:0.1em;color:rgba(255,255,255,0.7);background:none;border:1px solid rgba(255,255,255,0.35);border-radius:2px;padding:5px 14px;cursor:pointer;white-space:nowrap">Acknowledge</button>
+  </div>
+  <div id="k-top">
+    <div class="k-phase idle" id="k-phase">IDLE</div>
+    <div id="k-time">--:--</div>
+    <div id="k-time-lbl"></div>
+    <div id="k-dots">
+      <div class="k-indicator"><div class="k-dot" id="k-dot-power"></div>PWR</div>
+      <div class="k-indicator"><div class="k-dot" id="k-dot-comp"></div>COMP</div>
+      <div class="k-indicator"><div class="k-dot" id="k-dot-heat"></div>HEAT</div>
+    </div>
+  </div>
+  <div id="k-stats">
+    <div class="k-stat">
+      <div class="k-stat-val" id="k-stat-box" style="color:var(--teal)">--.-°</div>
+      <div class="k-stat-meta">
+        <div class="k-stat-label">Box Temp</div>
+        <div class="k-stat-sub" id="k-stat-box-sub">target --</div>
+      </div>
+    </div>
+    <div class="k-stat">
+      <div class="k-stat-val" id="k-stat-dough" style="color:var(--green)">--.-°</div>
+      <div class="k-stat-meta">
+        <div class="k-stat-label">Dough Temp</div>
+        <div class="k-stat-sub" id="k-stat-dough-sub">Δ --</div>
+      </div>
+    </div>
+    <div class="k-stat">
+      <div class="k-stat-val" id="k-stat-hum" style="color:var(--purple)">--%</div>
+      <div class="k-stat-meta">
+        <div class="k-stat-label">Humidity</div>
+        <div class="k-stat-sub" id="k-stat-hum-sub">target --</div>
+      </div>
+    </div>
+  </div>
+  <div id="k-chart-wrap">
+    <div id="k-chart-legend">
+      <div class="k-legend-item"><div class="k-legend-swatch" style="background:var(--teal)"></div>BOX</div>
+      <div class="k-legend-item"><div class="k-legend-swatch" style="background:var(--green)"></div>DOUGH</div>
+      <div class="k-legend-item"><div class="k-legend-swatch" style="background:var(--purple)"></div>HUMID</div>
+    </div>
+    <canvas id="kioskChart"></canvas>
+  </div>
+</div>
+
+<div id="idle-bar" style="width:100%"></div>
+
+<!-- ── MODALS ────────────────────────────── -->
+<div class="modal-overlay" id="reset-modal">
+  <div class="modal">
+    <h3>Reset Weekend Schedule?</h3>
+    <p>Sets Cold Ferment end to next Saturday 12:00 and recalculates RT end time.</p>
+    <div class="modal-buttons">
+      <button class="modal-cancel" onclick="closeResetModal()">Cancel</button>
+      <button class="modal-confirm" onclick="doReset()">Confirm Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="details-modal">
+  <div class="modal modal-large">
+    <button class="modal-close" onclick="closeDetails()">×</button>
+    <h3>Schedule &amp; Stats</h3>
+    <div class="detail-grid">
+      <div class="detail-section">
+        <h4>// Schedule</h4>
+        <div class="schedule-block">
+          <div class="schedule-row"><label>Cold Ferment ends</label><div class="input-group"><input type="datetime-local" id="cf-end" onchange="setCfEnd()"></div></div>
+          <div class="schedule-row"><label>CF target temp</label><div class="num-box"><button onclick="stepNum('cf-temp',-1)">−</button><input type="number" id="cf-temp" min="2" max="10" step="1" value="3" onchange="setCfTemp()"><span class="unit">°C</span><button onclick="stepNum('cf-temp',1)">+</button></div></div>
+          <div class="schedule-row"><label>RT Proof ends</label><div class="input-group"><input type="datetime-local" id="wp-end" onchange="setWpEnd()"></div></div>
+          <div class="schedule-row"><label>RT target temp</label><div class="num-box"><button onclick="stepNum('wp-temp',-1)">−</button><input type="number" id="wp-temp" min="20" max="35" step="1" value="24" onchange="setWpTemp()"><span class="unit">°C</span><button onclick="stepNum('wp-temp',1)">+</button></div></div>
+          <div class="schedule-row"><label>RT duration</label><div class="num-box"><button onclick="stepNum('wp-hours',-0.5)">−</button><input type="number" id="wp-hours" min="1" max="8" step="0.5" value="4" onchange="setWpHours()"><span class="unit">hrs</span><button onclick="stepNum('wp-hours',0.5)">+</button></div></div>
+          <div class="schedule-row"><label>Target humidity</label><div class="num-box"><button onclick="stepNum('hum-target',-5)">−</button><input type="number" id="hum-target" min="40" max="85" step="5" value="70" onchange="setHumidity()"><span class="unit">%</span><button onclick="stepNum('hum-target',5)">+</button></div></div>
+        </div>
+        <button class="btn-defaults" onclick="confirmReset()">📅 Reset Weekend Schedule</button>
+      </div>
+      <div class="detail-section">
+        <h4>// Run Stats (24h)</h4>
+        <div class="run-grid">
+          <div class="run-stat"><div class="run-stat-val" id="rs-elapsed" style="color:var(--text-mid)">--</div><div class="run-stat-lbl">Elapsed</div><div class="run-stat-sub" id="rs-elapsed-sub">since CF</div></div>
+          <div class="run-stat"><div class="run-stat-val" id="rs-cycles" style="color:var(--teal)">--</div><div class="run-stat-lbl">Cycles</div><div class="run-stat-sub" id="rs-cycle-avg">avg --</div></div>
+          <div class="run-stat"><div class="run-stat-val" id="rs-avg-temp" style="color:var(--teal)">--°</div><div class="run-stat-lbl">Avg Temp</div><div class="run-stat-sub" id="rs-temp-range">↓--/↑--</div></div>
+          <div class="run-stat"><div class="run-stat-val" id="rs-avg-hum" style="color:var(--purple)">--%</div><div class="run-stat-lbl">Avg Hum</div><div class="run-stat-sub" id="rs-hum-range">↓--/↑--</div></div>
+        </div>
+        <h4 style="margin-top:14px">// Cost (72h)</h4>
+        <div class="run-grid">
+          <div class="run-stat"><div class="run-stat-val" id="cs-total" style="color:var(--green)">£--.--</div><div class="run-stat-lbl">Total</div><div class="run-stat-sub" id="cs-total-sub">-- kWh</div></div>
+          <div class="run-stat"><div class="run-stat-val" id="cs-comp" style="color:var(--teal)">£--.--</div><div class="run-stat-lbl">Comp</div><div class="run-stat-sub" id="cs-comp-sub">--</div></div>
+          <div class="run-stat"><div class="run-stat-val" id="cs-heater" style="color:var(--green)">£--.--</div><div class="run-stat-lbl">Heater</div><div class="run-stat-sub" id="cs-heater-sub">--</div></div>
+          <div class="run-stat"><div class="run-stat-val" id="cs-rate" style="color:var(--text-dim)">--p</div><div class="run-stat-lbl">Rate</div><div class="run-stat-sub">per kWh</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── AUTH ─────────────────────────────────
+const EMBEDDED_TOKEN='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyOGY1NDNiMjRhODA0M2E0Yjc5YzY5NjliODczZTk0MyIsImlhdCI6MTc3NTg2MzYyOCwiZXhwIjoyMDkxMjIzNjI4fQ.FR9y38M7fGBBEimiRaUwzMgssF7UKeR_mxNqNGRt0Oc';
+const HA_URL=window.location.origin;
+let HA_TOKEN=EMBEDDED_TOKEN||localStorage.getItem('db_token')||'';
+const RATE_ENTITY  ='sensor.octopus_energy_electricity_19k0200079_2198765140197_current_rate';
+const ENERGY_ENTITY='sensor.appliance_doughboxpower_energy';
+const POWER_ENTITY ='sensor.appliance_doughboxpower_power';
+const COST_WINDOW_HOURS=72;
+
+function manualConnect(){const t=document.getElementById('ha-token-manual').value.trim();if(!t)return;HA_TOKEN=t;localStorage.setItem('db_token',t);document.getElementById('config-bar').style.display='none';toast('Connected');historyLoaded=false;startPolling();startIdleTimer();}
+function autoAuth(){return!!HA_TOKEN;}
+function authHeaders(){return{Authorization:`Bearer ${HA_TOKEN}`,'Content-Type':'application/json'};}
+async function haGet(e){const r=await fetch(`${HA_URL}/api/states/${e}`,{headers:authHeaders()});if(!r.ok)throw new Error(`${r.status}`);return r.json();}
+async function haSet(e,s){const d=e.split('.')[0];await fetch(`${HA_URL}/api/services/${d}/${s==='on'?'turn_on':'turn_off'}`,{method:'POST',headers:authHeaders(),body:JSON.stringify({entity_id:e})});}
+async function haService(d,s,b={}){await fetch(`${HA_URL}/api/services/${d}/${s}`,{method:'POST',headers:authHeaders(),body:JSON.stringify(b)});}
+async function haHistory(e,h=24){const end=new Date(),start=new Date(end-h*3600000);const r=await fetch(`${HA_URL}/api/history/period/${start.toISOString()}?end_time=${end.toISOString()}&filter_entity_id=${e}&minimal_response=true`,{headers:authHeaders()});return r.json();}
+
+let pollTimer=null;
+function startPolling(){if(pollTimer)clearInterval(pollTimer);refresh();pollTimer=setInterval(refresh,10000);}
+
+// ── IDLE / KIOSK ──────────────────────────
+const IDLE_MS=10000;
+let lastActivity=Date.now(),idleInterval=null,kioskActive=false,kioskEnteredAt=0;
+
+['click','touchstart','touchend','keydown'].forEach(ev=>{
+  document.addEventListener(ev,()=>{if(!kioskActive)lastActivity=Date.now();},{passive:true});
+});
+function startIdleTimer(){
+  if(idleInterval)clearInterval(idleInterval);
+  lastActivity=Date.now();
+  document.getElementById('idle-bar').style.width='100%';
+  document.getElementById('idle-bar').style.display='block';
+  idleInterval=setInterval(()=>{
+    if(kioskActive)return;
+    const elapsed=Date.now()-lastActivity;
+    const pct=Math.max(0,(1-elapsed/IDLE_MS)*100);
+    document.getElementById('idle-bar').style.width=pct+'%';
+    if(elapsed>=IDLE_MS){clearInterval(idleInterval);idleInterval=null;enterKiosk();}
+  },500);
+}
+function enterKiosk(){
+  kioskActive=true;kioskEnteredAt=Date.now();
+  document.getElementById('kiosk').style.cssText=
+    'display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#030d14;';
+  document.getElementById('idle-bar').style.display='none';
+  setTimeout(()=>{syncKiosk();sizeKioskChart();},100);
+}
+function exitKiosk(){
+  if(!kioskActive)return;
+  if(Date.now()-kioskEnteredAt<1500)return;
+  kioskActive=false;lastActivity=Date.now();
+  document.getElementById('kiosk').style.display='none';
+  startIdleTimer();setTimeout(sizeChart,60);
+}
+document.getElementById('kiosk').addEventListener('click',exitKiosk);
+document.getElementById('kiosk').addEventListener('touchstart',exitKiosk,{passive:true});
+
+// ── STATE ─────────────────────────────────
+let lastPhase='idle';
+let historyLoaded=false;
+let overtempDismissed=false;  // ensures first refresh always loads with correct phase
+let lastTime={remaining:'--:--',label:'waiting'};
+let lastStats={box:'--.-°',dough:'--.-°',hum:'--%',boxTgt:'tgt --',doughDelta:'Δ --',humTgt:'tgt --'};
+let lastDots={power:'',comp:'',heat:''};
+
+function syncKiosk(){
+  const kb=document.getElementById('k-phase');
+  kb.textContent=document.getElementById('phase-badge').textContent;
+  kb.className='k-phase '+lastPhase;
+  document.getElementById('k-time').textContent=lastTime.remaining;
+  document.getElementById('k-stat-box').textContent=lastStats.box;
+  document.getElementById('k-stat-dough').textContent=lastStats.dough;
+  document.getElementById('k-stat-hum').textContent=lastStats.hum;
+  document.getElementById('k-stat-box-sub').textContent=lastStats.boxTgt;
+  document.getElementById('k-stat-dough-sub').textContent=lastStats.doughDelta;
+  document.getElementById('k-stat-hum-sub').textContent=lastStats.humTgt;
+  ['power','comp','heat'].forEach(k=>{const el=document.getElementById('k-dot-'+k);if(el&&lastDots[k])el.className='k-dot '+lastDots[k];});
+  drawKioskChart();
+}
+
+// ── REFRESH ───────────────────────────────
+async function refresh(){
+  if(!HA_TOKEN)return;
+  try{
+    const [power,heater,comp,dehum,phase,cfEnd,wpEnd,cfTemp,wpTemp,wpHours,humidity,tempAvg,tempDough,humAvg,climate]=await Promise.all([
+      haGet('switch.appliance_doughboxpower'),haGet('switch.doughbox_heater'),
+      haGet('switch.doughbox_compressor'),haGet('switch.doughbox_dehumidifier'),
+      haGet('input_select.doughbox_current_phase'),
+      haGet('input_datetime.doughbox_cold_ferment_end'),
+      haGet('input_datetime.doughbox_warm_proof_end'),
+      haGet('input_number.doughbox_cold_ferment_temp'),
+      haGet('input_number.doughbox_warm_proof_temp'),
+      haGet('input_number.doughbox_warm_proof_hours'),
+      haGet('number.doughbox_target_humidity'),
+      haGet('sensor.doughbox_temperature_average'),
+      haGet('sensor.thermdoughprobe_temperature'),
+      haGet('sensor.doughbox_humidity_average'),
+      haGet('climate.doughbox_climate'),
+    ]);
+    // Fetch overtemp sensor separately — entity may not exist yet if ESPHome not yet flashed.
+    // A missing entity must not break the rest of refresh().
+    const overtempSensor = await haGet('binary_sensor.doughbox_over_temperature').catch(()=>null);
+    updateStatus(power,heater,comp,dehum,phase,cfEnd,wpEnd);
+    updateStats(tempAvg,tempDough,humAvg,climate);
+    updateOvertemp(overtempSensor,tempAvg);
+    updateInputs(cfEnd,wpEnd,cfTemp,wpTemp,wpHours,humidity);
+    updateDiag(climate,heater,comp,dehum);
+    if(kioskActive)syncKiosk();
+  }catch(e){console.warn('Refresh:',e);}
+}
+
+function updateStatus(power,heater,comp,dehum,phase,cfEnd,wpEnd){
+  setDot('dot-power',power.state);setDot('dot-esp',heater.state==='unavailable'?'off':'on');
+  setDot('dot-comp',comp.state==='on'?'on':'off');setDot('dot-heat',heater.state==='on'?'on':'off');
+  lastDots.power=power.state==='on'?'on':'off';
+  lastDots.comp=comp.state==='on'?'on':'off';
+  lastDots.heat=heater.state==='on'?'on':'off';
+  document.getElementById('power-toggle').checked=(power.state==='on');
+  const p=phase.state;
+  const newPhase=p==='Cold Ferment'?'cold':p==='Warm Proof'?'warm':p==='Complete'?'complete':'idle';
+  const phaseChanged = newPhase !== lastPhase;
+  lastPhase=newPhase;
+  const badge=document.getElementById('phase-badge');
+  badge.textContent=p.toUpperCase();badge.className='phase-badge '+lastPhase;
+  const now=Date.now();let endTs=null,label='next phase';
+  if(p==='Cold Ferment'){endTs=new Date(cfEnd.state).getTime();label='until warm proof';}
+  if(p==='Warm Proof')  {endTs=new Date(wpEnd.state).getTime();label='until complete';}
+  if(endTs&&endTs>now){const rem=endTs-now,h=Math.floor(rem/3600000),m=Math.floor((rem%3600000)/60000);lastTime.remaining=`${h}h ${String(m).padStart(2,'0')}m`;lastTime.label=label;}
+  else if(p==='Complete'){lastTime.remaining='BAKE!';lastTime.label='ready now';}
+  else{lastTime.remaining='--:--';lastTime.label='idle';}
+  document.getElementById('time-remaining').textContent=lastTime.remaining;
+  document.getElementById('time-label').textContent=lastTime.label;
+  const active=p!=='Idle'&&p!=='Complete';
+  document.getElementById('btn-stop').style.display=active?'flex':'none';
+  document.getElementById('btn-start').style.display=active?'none':'flex';
+  document.getElementById('btn-skip').style.display=active?'none':'flex';
+  // Reload chart whenever phase changes OR on first load (so phase is known before fetching)
+  if(phaseChanged || !historyLoaded){historyLoaded=true;setTimeout(loadHistory,200);}
+}
+function setDot(id,s){document.getElementById(id).className='dot '+(s==='on'?'on':s==='unavailable'?'warn':'off');}
+function updateOvertemp(overtempSensor, tempAvg){
+  const firmwareFlag = overtempSensor && overtempSensor.state === 'on';
+  const box = parseFloat(tempAvg && tempAvg.state);
+  const fallbackFlag = !isNaN(box) && box > 30;
+  const isOvertemp = firmwareFlag || fallbackFlag;
+  const banner  = document.getElementById('overtemp-banner');
+  const kBanner = document.getElementById('k-overtemp-banner');
+  const app     = document.getElementById('app');
+  if(isOvertemp && !overtempDismissed){
+    const reading = !isNaN(box) ? box.toFixed(1)+'°C' : 'HIGH';
+    document.getElementById('overtemp-reading').textContent   = reading;
+    document.getElementById('k-overtemp-reading').textContent = reading;
+    banner.classList.add('active');
+    kBanner.style.display = 'flex';
+    app.classList.add('overtemp-shift');
+  } else if(!isOvertemp){
+    overtempDismissed = false;
+    banner.classList.remove('active');
+    kBanner.style.display = 'none';
+    app.classList.remove('overtemp-shift');
+  }
+}
+
+function updateStats(tempAvg,tempDough,humAvg,climate){
+  const box=parseFloat(tempAvg.state),dough=parseFloat(tempDough.state),hum=parseFloat(humAvg.state);
+  lastStats.box=isNaN(box)?'--.-°':box.toFixed(1)+'°';
+  lastStats.dough=isNaN(dough)?'--.-°':dough.toFixed(1)+'°';
+  lastStats.hum=isNaN(hum)?'--%':hum.toFixed(0)+'%';
+  document.getElementById('stat-box').textContent=lastStats.box;
+  document.getElementById('stat-dough').textContent=lastStats.dough;
+  document.getElementById('stat-hum').textContent=lastStats.hum;
+  const attr=climate.attributes||{};
+  lastStats.boxTgt=(attr.target_temp_low&&attr.target_temp_high)?`tgt ${attr.target_temp_low}–${attr.target_temp_high}°`:'tgt --';
+  document.getElementById('stat-box-target').textContent=lastStats.boxTgt;
+  if(!isNaN(box)&&!isNaN(dough)){const d=(dough-box).toFixed(1);lastStats.doughDelta=`Δ ${d>0?'+':''}${d} vs box`;}
+  document.getElementById('stat-dough-delta').textContent=lastStats.doughDelta;
+  const htgt=document.getElementById('hum-target').value;
+  lastStats.humTgt=htgt?`tgt ${htgt}%`:'tgt --';
+  document.getElementById('stat-hum-target').textContent=lastStats.humTgt;
+}
+function updateInputs(cfEnd,wpEnd,cfTemp,wpTemp,wpHours,humidity){
+  setDateInput('cf-end',cfEnd.state);setDateInput('wp-end',wpEnd.state);
+  setNumIfUnfocused('cf-temp',parseFloat(cfTemp.state));setNumIfUnfocused('wp-temp',parseFloat(wpTemp.state));
+  setNumIfUnfocused('wp-hours',parseFloat(wpHours.state));setNumIfUnfocused('hum-target',parseFloat(humidity.state));
+}
+function setDateInput(id,v){const el=document.getElementById(id);if(document.activeElement===el)return;const d=new Date(v);if(isNaN(d))return;const l=new Date(d-d.getTimezoneOffset()*60000);el.value=l.toISOString().slice(0,16);}
+function setNumIfUnfocused(id,v){const el=document.getElementById(id);if(document.activeElement!==el)el.value=v;}
+function updateDiag(climate,heater,comp,dehum){
+  const attr=climate.attributes||{};
+  document.getElementById('d-target').textContent=(attr.target_temp_low&&attr.target_temp_high)?`${attr.target_temp_low}/${attr.target_temp_high}`:'--/--';
+  document.getElementById('d-action').textContent=(attr.hvac_action||climate.state||'--').toUpperCase();
+  const active=[];
+  if(heater.state==='on')active.push('HEAT');if(comp.state==='on')active.push('COOL');if(dehum.state==='on')active.push('DEHUM');
+  const el=document.getElementById('d-relays');
+  el.textContent=active.length?active.join(' + '):'ALL OFF';
+  el.style.color=heater.state==='on'?'var(--green)':comp.state==='on'?'var(--teal)':active.length?'var(--purple)':'var(--text-dim)';
+}
+
+// ── CHART WINDOW ──────────────────────────
+// Returns history hours based on active phase
+function chartWindowHours(){
+  if(lastPhase==='cold') return 12;
+  if(lastPhase==='warm') return 4;
+  return 24;
+}
+// ── OVER-TEMP DISMISS ─────────────────────
+function dismissOvertemp(){
+  overtempDismissed=true;
+  document.getElementById('overtemp-banner').classList.remove('active');
+  document.getElementById('k-overtemp-banner').style.display='none';
+  document.getElementById('app').classList.remove('overtemp-shift');
+  toast('Over-temp acknowledged — monitor closely');
+}
+
+async function togglePower(on){await haSet('switch.appliance_doughboxpower',on?'on':'off');toast(on?'Power ON':'Power OFF');setTimeout(refresh,1000);}
+async function callScript(n){await haService('script',n);toast(n.replace(/_/g,' '));setTimeout(refresh,1500);}
+async function setClimate(mode,low,high){
+  if(mode==='off')await haService('climate','set_hvac_mode',{entity_id:'climate.doughbox_climate',hvac_mode:'off'});
+  else await haService('climate','set_temperature',{entity_id:'climate.doughbox_climate',hvac_mode:mode,target_temp_low:low,target_temp_high:high});
+  toast('Climate updated');setTimeout(refresh,1000);
+}
+function stepNum(id,step){const el=document.getElementById(id);el.value=Math.min(parseFloat(el.max),Math.max(parseFloat(el.min),parseFloat(el.value)+step));el.dispatchEvent(new Event('change'));}
+async function setCfEnd()  {const v=document.getElementById('cf-end').value;if(!v)return;await haService('input_datetime','set_datetime',{entity_id:'input_datetime.doughbox_cold_ferment_end',datetime:new Date(v).toISOString().replace('T',' ').slice(0,19)});}
+async function setWpEnd()  {const v=document.getElementById('wp-end').value;if(!v)return;await haService('input_datetime','set_datetime',{entity_id:'input_datetime.doughbox_warm_proof_end',datetime:new Date(v).toISOString().replace('T',' ').slice(0,19)});}
+async function setCfTemp() {await haService('input_number','set_value',{entity_id:'input_number.doughbox_cold_ferment_temp',value:parseFloat(document.getElementById('cf-temp').value)});}
+async function setWpTemp() {await haService('input_number','set_value',{entity_id:'input_number.doughbox_warm_proof_temp',value:parseFloat(document.getElementById('wp-temp').value)});}
+async function setWpHours(){await haService('input_number','set_value',{entity_id:'input_number.doughbox_warm_proof_hours',value:parseFloat(document.getElementById('wp-hours').value)});}
+async function setHumidity(){await haService('number','set_value',{entity_id:'number.doughbox_target_humidity',value:parseFloat(document.getElementById('hum-target').value)});}
+
+// ── MODALS ────────────────────────────────
+function openDetails()   {document.getElementById('details-modal').classList.add('open');loadHistory();}
+function closeDetails()  {document.getElementById('details-modal').classList.remove('open');}
+function confirmReset()  {document.getElementById('reset-modal').classList.add('open');}
+function closeResetModal(){document.getElementById('reset-modal').classList.remove('open');}
+async function doReset() {closeResetModal();await haService('script','doughbox_set_defaults');toast('Schedule reset');setTimeout(refresh,1500);}
+document.getElementById('reset-modal').addEventListener('click',e=>{if(e.target.id==='reset-modal')closeResetModal();});
+document.getElementById('details-modal').addEventListener('click',e=>{if(e.target.id==='details-modal')closeDetails();});
+let toastTimer;
+function toast(msg){const el=document.getElementById('toast');el.textContent='// '+msg.toUpperCase()+' //';el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2800);}
+
+// ── CHART ─────────────────────────────────
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+let chartData={box:[],dough:[],hum:[]};
+let chartTipX=null;
+
+function drawChartOn(canvasId,wrapEl,tipX,lw,fs){
+  var canvas=document.getElementById(canvasId);
+  var cw=wrapEl.clientWidth-20,ch=wrapEl.clientHeight-18;
+  if(cw<10||ch<10)return;
+  canvas.width=cw;canvas.height=ch;
+  var W=cw,H=ch,ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  var PAD={l:fs>12?66:46,r:fs>12?82:46,t:12,b:fs>12?38:26};
+  var pw=W-PAD.l-PAD.r,ph=H-PAD.t-PAD.b;
+  var all=[].concat(chartData.box,chartData.dough,chartData.hum);
+  if(!all.length)return;
+  var xMin=all[0].x,xMax=all[0].x;
+  for(var i=0;i<all.length;i++){if(all[i].x<xMin)xMin=all[i].x;if(all[i].x>xMax)xMax=all[i].x;}
+  if(xMin===xMax)return;
+  var xs=v=>PAD.l+(v-xMin)/(xMax-xMin)*pw;
+  var ys=v=>PAD.t+(1-Math.max(0,Math.min(1,v/30)))*ph;
+  var ys2=v=>PAD.t+(1-Math.max(0,Math.min(1,(v-30)/70)))*ph;
+
+  // grid
+  ctx.setLineDash([2,6]);ctx.lineWidth=0.5;
+  for(var t=0;t<=30;t+=5){
+    ctx.strokeStyle='rgba(10,32,48,0.8)';
+    ctx.beginPath();ctx.moveTo(PAD.l,ys(t));ctx.lineTo(W-PAD.r,ys(t));ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // cold zone fill
+  ctx.fillStyle='rgba(0,229,204,0.03)';
+  ctx.fillRect(PAD.l,ys(5),pw,ys(0)-ys(5));
+
+  // box area
+  if(chartData.box.length>1){
+    ctx.fillStyle='rgba(0,229,204,0.04)';
+    ctx.beginPath();
+    ctx.moveTo(xs(chartData.box[0].x),ys(chartData.box[0].y));
+    for(var i=0;i<chartData.box.length;i++)ctx.lineTo(xs(chartData.box[i].x),ys(chartData.box[i].y));
+    ctx.lineTo(xs(chartData.box[chartData.box.length-1].x),ys(0));
+    ctx.lineTo(xs(chartData.box[0].x),ys(0));
+    ctx.closePath();ctx.fill();
+  }
+
+  // lines
+  function drawL(pts,color,sf,dash){
+    if(pts.length<2)return;
+    ctx.strokeStyle=color;ctx.lineWidth=lw||2;ctx.setLineDash(dash?[6,3]:[]);
+    ctx.beginPath();
+    for(var i=0;i<pts.length;i++){var x=xs(pts[i].x),y=sf(pts[i].y);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+    ctx.stroke();ctx.setLineDash([]);
+  }
+  drawL(chartData.box,  '#00e5cc',ys, false);
+  drawL(chartData.dough,'#00ff87',ys, false);
+  drawL(chartData.hum,  '#7b5ea7',ys2,true);
+
+  // tooltip
+  if(tipX!==null){
+    var cx=xs(tipX);
+    ctx.strokeStyle='rgba(0,229,204,0.2)';ctx.lineWidth=1;ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(cx,PAD.t);ctx.lineTo(cx,H-PAD.b);ctx.stroke();ctx.setLineDash([]);
+    function near(arr){if(!arr.length)return null;var b=arr[0];for(var i=1;i<arr.length;i++)if(Math.abs(arr[i].x-tipX)<Math.abs(b.x-tipX))b=arr[i];return b;}
+    var bp=near(chartData.box),dp=near(chartData.dough),hp=near(chartData.hum);
+    var td=new Date(tipX);
+    var lines=[td.getHours().toString().padStart(2,'0')+':'+td.getMinutes().toString().padStart(2,'0')+'  '+td.getDate()+' '+MONTHS[td.getMonth()]];
+    if(bp)lines.push('BOX   '+bp.y.toFixed(1)+'°');
+    if(dp)lines.push('DOUGH '+dp.y.toFixed(1)+'°');
+    if(hp)lines.push('HUMID '+hp.y.toFixed(0)+'%');
+    var tw=128,th=lines.length*18+12,tx=cx+12,ty=PAD.t+10;
+    if(tx+tw>W-4)tx=cx-tw-12;
+    ctx.fillStyle='rgba(3,13,20,0.95)';ctx.fillRect(tx,ty,tw,th);
+    ctx.strokeStyle='rgba(0,229,204,0.25)';ctx.lineWidth=1;ctx.strokeRect(tx,ty,tw,th);
+    ctx.font=(fs||11)+'px "IBM Plex Mono",monospace';ctx.textAlign='left';
+    ['rgba(14,51,72,1)','#00e5cc','#00ff87','#7b5ea7'].forEach((c,i)=>{
+      if(i<lines.length){ctx.fillStyle=c;ctx.fillText(lines[i],tx+8,ty+15+i*18);}
+    });
+  }
+
+  // X ticks — always HH:MM, dim date below on day crossings
+  var xFs=fs||10,xDFs=Math.max(8,Math.round(xFs*0.72));
+  ctx.font=xFs+'px "IBM Plex Mono",monospace';ctx.textAlign='center';
+  for(var i=0;i<=7;i++){
+    var t=xMin+(xMax-xMin)*i/7,x=xs(t),dd=new Date(t),now=new Date();
+    var timeStr=dd.getHours().toString().padStart(2,'0')+':'+dd.getMinutes().toString().padStart(2,'0');
+    var otherDay=dd.toDateString()!==now.toDateString();
+    ctx.fillStyle='rgba(0,229,204,0.5)';
+    ctx.font=xFs+'px "IBM Plex Mono",monospace';
+    ctx.fillText(timeStr,x,H-(otherDay?xDFs+7:5));
+    if(otherDay){
+      ctx.font=xDFs+'px "IBM Plex Mono",monospace';
+      ctx.fillStyle='rgba(0,229,204,0.22)';
+      ctx.fillText(dd.getDate()+' '+MONTHS[dd.getMonth()],x,H-2);
+    }
+  }
+  // Y left (temp)
+  ctx.textAlign='right';ctx.fillStyle='rgba(0,229,204,0.55)';
+  for(var t=0;t<=30;t+=5)ctx.fillText(t+'°',PAD.l-6,ys(t)+4);
+  // Y right (hum)
+  ctx.textAlign='left';ctx.fillStyle='rgba(123,94,167,0.55)';
+  for(var t=30;t<=100;t+=10)ctx.fillText(t+'%',W-PAD.r+6,ys2(t)+4);
+}
+
+function drawChart()     {drawChartOn('mainChart', document.getElementById('right-panel'),chartTipX,2,11);}
+function drawKioskChart(){drawChartOn('kioskChart',document.getElementById('k-chart-wrap'),null,3.5,20);}
+function sizeChart()     {drawChart();}
+function sizeKioskChart(){drawKioskChart();}
+
+function initChart(){
+  var canvas=document.getElementById('mainChart');
+  function getX(e){return e.touches?e.touches[0].clientX:e.clientX;}
+  function upd(e){
+    var all=[].concat(chartData.box,chartData.dough,chartData.hum);if(!all.length)return;
+    var xMin=all[0].x,xMax=all[0].x;
+    for(var i=0;i<all.length;i++){if(all[i].x<xMin)xMin=all[i].x;if(all[i].x>xMax)xMax=all[i].x;}
+    var r=canvas.getBoundingClientRect();
+    chartTipX=xMin+(getX(e)-r.left-46)/(canvas.width-92)*(xMax-xMin);
+    drawChart();
+  }
+  canvas.addEventListener('mousemove',upd);
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();upd(e);},{passive:false});
+  canvas.addEventListener('touchmove', e=>{e.preventDefault();upd(e);},{passive:false});
+  canvas.addEventListener('mouseleave',()=>{chartTipX=null;drawChart();});
+  canvas.addEventListener('touchend',  ()=>{chartTipX=null;drawChart();});
+}
+
+async function loadHistory(){
+  if(!HA_TOKEN)return;
+  const hours=chartWindowHours();
+  document.getElementById('chart-no-data').style.display='none';
+  try{
+    const[tempHist,doughHist,humHist]=await Promise.all([
+      haHistory('sensor.doughbox_temperature_average',hours),
+      haHistory('sensor.thermdoughprobe_temperature',hours),
+      haHistory('sensor.doughbox_humidity_average',hours),
+    ]);
+    const toPoints=(arr,max=200)=>{
+      const raw=(arr[0]||[]).filter(s=>s.state!=='unavailable'&&s.state!=='unknown'&&s.state!==null)
+        .map(s=>({x:new Date(s.last_changed).getTime(),y:parseFloat(s.state)})).filter(p=>!isNaN(p.y));
+      if(raw.length<=max)return raw;
+      const step=Math.ceil(raw.length/max);return raw.filter((_,i)=>i%step===0);
+    };
+    chartData.box  =toPoints(tempHist);
+    chartData.dough=toPoints(doughHist);
+    chartData.hum  =toPoints(humHist);
+    document.getElementById('chart-no-data').style.display=chartData.box.length?'none':'flex';
+    drawChart();if(kioskActive)drawKioskChart();
+    const compHist=await haHistory('switch.doughbox_compressor',hours);
+    updateRunStats(tempHist,humHist,compHist);
+    const[powerHist,compHistC,heaterHist,dehumHist,energyHist,rateState]=await Promise.all([
+      haHistory(POWER_ENTITY,COST_WINDOW_HOURS),
+      haHistory('switch.doughbox_compressor',COST_WINDOW_HOURS),
+      haHistory('switch.doughbox_heater',COST_WINDOW_HOURS),
+      haHistory('switch.doughbox_dehumidifier',COST_WINDOW_HOURS),
+      haHistory(ENERGY_ENTITY,COST_WINDOW_HOURS),
+      haGet(RATE_ENTITY),
+    ]);
+    updateCostStats(powerHist,compHistC,heaterHist,dehumHist,energyHist,rateState);
+  }catch(e){document.getElementById('chart-no-data').style.display='flex';console.warn('History:',e);}
+}
+
+function updateRunStats(tempHist,humHist,compHist){
+  const tp=(tempHist[0]||[]).map(s=>parseFloat(s.state)).filter(v=>!isNaN(v));
+  const hp=(humHist[0] ||[]).map(s=>parseFloat(s.state)).filter(v=>!isNaN(v));
+  if(tp.length){const avg=tp.reduce((a,b)=>a+b,0)/tp.length;document.getElementById('rs-avg-temp').textContent=avg.toFixed(1)+'°';document.getElementById('rs-temp-range').textContent=`↓${Math.min(...tp).toFixed(1)}/↑${Math.max(...tp).toFixed(1)}`;}
+  if(hp.length){const avg=hp.reduce((a,b)=>a+b,0)/hp.length;document.getElementById('rs-avg-hum').textContent=avg.toFixed(0)+'%';document.getElementById('rs-hum-range').textContent=`↓${Math.min(...hp).toFixed(0)}/↑${Math.max(...hp).toFixed(0)}`;}
+  const pts=(compHist[0]||[]);let cycles=0,totalOnMs=0,lastOn=null;
+  for(const s of pts){if(s.state==='on')lastOn=new Date(s.last_changed);if(s.state==='off'&&lastOn){totalOnMs+=new Date(s.last_changed)-lastOn;cycles++;lastOn=null;}}
+  document.getElementById('rs-cycles').textContent=cycles||'--';
+  if(cycles>0)document.getElementById('rs-cycle-avg').textContent=`avg ${(totalOnMs/cycles/60000).toFixed(1)}m`;
+  if(pts.length){const start=new Date(pts[0].last_changed),elMs=Date.now()-start,eh=Math.floor(elMs/3600000),em=Math.floor((elMs%3600000)/60000);document.getElementById('rs-elapsed').textContent=`${eh}h ${String(em).padStart(2,'0')}m`;}
+}
+function buildTimeline(ph,ch,hh,dh){
+  const ev=[];const add=(arr,kind)=>(arr[0]||[]).forEach(s=>{const t=new Date(s.last_changed).getTime();if(isNaN(t))return;if(kind==='power'){const v=parseFloat(s.state);if(!isNaN(v))ev.push({t,kind,v});}else ev.push({t,kind,v:s.state==='on'});});
+  add(ph,'power');add(ch,'comp');add(hh,'heater');add(dh,'dehum');ev.sort((a,b)=>a.t-b.t);return ev;
+}
+function integrateCosts(events,endTs){
+  let watts=NaN,comp=false,heater=false,dehum=false,prevT=events.length?events[0].t:endTs;
+  const iv=[];
+  for(let i=0;i<events.length;i++){const e=events[i];if(i>0)iv.push({dur:e.t-prevT,watts,comp,heater,dehum});if(e.kind==='power')watts=e.v;else if(e.kind==='comp')comp=e.v;else if(e.kind==='heater')heater=e.v;else if(e.kind==='dehum')dehum=e.v;prevT=e.t;}
+  iv.push({dur:endTs-prevT,watts,comp,heater,dehum});
+  const off=iv.filter(x=>!x.comp&&!x.heater&&!x.dehum&&!isNaN(x.watts)).map(x=>x.watts).sort((a,b)=>a-b);
+  const base=off.length?off[Math.floor(off.length/2)]:0;
+  let cJ=0,hJ=0,cMs=0,hMs=0,cWs=0,cWn=0,hWs=0,hWn=0;
+  for(const x of iv){if(x.dur<=0||isNaN(x.watts))continue;const net=Math.max(0,x.watts-base);if(x.comp&&!x.heater&&!x.dehum){cJ+=net*x.dur;cMs+=x.dur;cWs+=x.watts;cWn++;}else if(x.heater&&!x.comp&&!x.dehum){hJ+=net*x.dur;hMs+=x.dur;hWs+=x.watts;hWn++;}}
+  return{compKwh:cJ/1000/3600000,compOnMs:cMs,compAvgW:cWn?cWs/cWn:NaN,heaterKwh:hJ/1000/3600000,heaterOnMs:hMs,heaterAvgW:hWn?hWs/hWn:NaN};
+}
+function updateCostStats(ph,ch,hh,dh,eh,rateState){
+  const rate=parseFloat(rateState&&rateState.state),ok=!isNaN(rate);
+  const rs=ok?(rate*100).toFixed(1)+'p':'--p';
+  document.getElementById('cs-rate').textContent=rs;document.getElementById('d-rate').textContent=rs;
+  const res=integrateCosts(buildTimeline(ph,ch,hh,dh),Date.now());
+  const fW=w=>isNaN(w)?'--W':Math.round(w)+'W',fM=ms=>Math.round(ms/60000)+'m',fG=v=>isNaN(v)?'£--.--':'£'+v.toFixed(2);
+  document.getElementById('cs-comp').textContent=fG(ok?res.compKwh*rate:NaN);document.getElementById('cs-comp-sub').textContent=`${fM(res.compOnMs)} @ ${fW(res.compAvgW)}`;
+  document.getElementById('cs-heater').textContent=fG(ok?res.heaterKwh*rate:NaN);document.getElementById('cs-heater-sub').textContent=`${fM(res.heaterOnMs)} @ ${fW(res.heaterAvgW)}`;
+  const eP=(eh[0]||[]).map(s=>parseFloat(s.state)).filter(v=>!isNaN(v));
+  if(eP.length>=2&&ok){const d=Math.max(0,eP[eP.length-1]-eP[0]),total=d*rate;document.getElementById('cs-total').textContent='£'+total.toFixed(2);document.getElementById('cs-total-sub').textContent=`${d.toFixed(2)} kWh`;document.getElementById('d-cost').textContent='£'+total.toFixed(2);}
+}
+
+// ── BOOT ──────────────────────────────────
+initChart();
+setTimeout(()=>{drawChart();drawKioskChart();},150);
+let rzt;window.addEventListener('resize',()=>{clearTimeout(rzt);rzt=setTimeout(()=>{drawChart();if(kioskActive)drawKioskChart();},200);});
+if(autoAuth()){startPolling();startIdleTimer();}
+else{document.getElementById('config-bar').style.display='flex';document.getElementById('chart-no-data').style.display='flex';}
+setInterval(()=>{if(HA_URL&&HA_TOKEN)loadHistory();},900000);
+</script>
+</body>
+</html>
