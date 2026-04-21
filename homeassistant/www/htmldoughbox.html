@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Doughbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+:root {
+  --bg:#0a0c0f; --surface:#12151a; --surface2:#1a1e26; --border:#232836;
+  --cold:#38bdf8; --cold-dim:rgba(56,189,248,0.15);
+  --warm:#fb923c; --warm-dim:rgba(251,146,60,0.15);
+  --green:#4ade80; --green-dim:rgba(74,222,128,0.12);
+  --red:#f87171; --red-dim:rgba(248,113,113,0.12);
+  --amber:#fbbf24; --muted:#4a5166;
+  --text:#e2e8f0; --text-dim:#64748b;
+  --radius:10px; --font-head:'Syne',sans-serif; --font-mono:'DM Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font-mono);font-size:13px;min-height:100vh;overflow-x:hidden;overflow-y:auto}
+#config-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;align-items:center;gap:10px;flex-wrap:wrap}
+#config-bar label{color:var(--text-dim);font-size:11px;white-space:nowrap}
+#config-bar input{background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 8px;flex:1;min-width:180px}
+#config-bar button{background:var(--cold);border:none;border-radius:6px;color:#000;cursor:pointer;font-family:var(--font-head);font-size:11px;font-weight:700;letter-spacing:0.05em;padding:6px 14px;white-space:nowrap}
+#app{display:flex;flex-direction:column;min-height:100vh;padding-bottom:env(safe-area-inset-bottom,0px)}
+#status-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
+.status-left{display:flex;align-items:center;gap:12px}
+.phase-badge{font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;padding:4px 12px;border-radius:6px;transition:all 0.4s}
+.phase-badge.idle{background:var(--surface2);color:var(--text-dim)}
+.phase-badge.cold{background:var(--cold-dim);color:var(--cold);border:1px solid var(--cold)}
+.phase-badge.warm{background:var(--warm-dim);color:var(--warm);border:1px solid var(--warm)}
+.phase-badge.complete{background:var(--green-dim);color:var(--green);border:1px solid var(--green)}
+.time-remaining{font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);letter-spacing:-0.02em}
+.time-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em}
+.status-indicators{display:flex;gap:8px;align-items:center}
+.indicator{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background 0.3s}
+.dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot.off{background:var(--red)}
+.dot.warn{background:var(--amber)}
+#main{display:grid;grid-template-columns:1fr 350px;gap:0}
+#chart-panel{display:flex;flex-direction:column;padding:12px;gap:8px;border-right:1px solid var(--border)}
+.chart-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.chart-title{font-family:var(--font-head);font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-dim)}
+.chart-legend{display:flex;gap:14px;align-items:center}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim)}
+.legend-swatch{width:18px;height:2px;border-radius:1px}
+.chart-wrap{position:relative;height:280px;flex-shrink:0;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:12px;overflow:hidden}
+#mainChart{display:block}
+.stats-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;flex-shrink:0}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;display:flex;flex-direction:column;gap:2px}
+.stat-val{font-family:var(--font-mono);font-size:16px;font-weight:500;line-height:1}
+.stat-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim)}
+.stat-sub{font-size:9px;color:var(--text-dim);margin-top:1px}
+#side-panel{display:flex;flex-direction:column;overflow-y:auto;gap:0}
+.panel-section{border-bottom:1px solid var(--border);padding:12px}
+.panel-section:last-child{border-bottom:none}
+.section-title{font-family:var(--font-head);font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px}
+.schedule-block{display:flex;flex-direction:column;gap:8px}
+.schedule-row{display:flex;flex-direction:column;gap:3px}
+.schedule-row label{font-size:10px;color:var(--text-dim);letter-spacing:0.05em;text-transform:uppercase}
+.input-group{display:flex;gap:4px;align-items:center}
+.input-group input[type="datetime-local"]{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 7px;flex:1;width:100%}
+.input-group input[type="datetime-local"]:focus{outline:none;border-color:var(--cold)}
+.num-box{display:flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:6px;overflow:hidden;width:100%}
+.num-box button{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px 10px;transition:color 0.2s,background 0.2s;flex-shrink:0}
+.num-box button:hover{color:var(--text);background:var(--border)}
+.num-box input{background:none;border:none;color:var(--text);font-family:var(--font-mono);font-size:13px;text-align:center;flex:1;min-width:0;outline:none;padding:4px 0}
+.num-box .unit{font-size:10px;color:var(--text-dim);padding-right:8px;white-space:nowrap}
+.btn-row{display:flex;flex-direction:column;gap:6px}
+.btn{border:none;border-radius:var(--radius);cursor:pointer;font-family:var(--font-head);font-size:12px;font-weight:700;letter-spacing:0.06em;padding:9px 12px;text-align:left;transition:all 0.15s;display:flex;align-items:center;gap:8px;width:100%}
+.btn:active{transform:scale(0.98)}
+.btn:disabled{opacity:0.35;cursor:not-allowed}
+.btn-icon{font-size:14px;flex-shrink:0}
+.btn-start{background:var(--green-dim);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
+.btn-start:hover:not(:disabled){background:rgba(74,222,128,0.2)}
+.btn-skip{background:var(--warm-dim);color:var(--warm);border:1px solid rgba(251,146,60,0.3)}
+.btn-skip:hover:not(:disabled){background:rgba(251,146,60,0.2)}
+.btn-stop{background:var(--red-dim);color:var(--red);border:1px solid rgba(248,113,113,0.3)}
+.btn-stop:hover:not(:disabled){background:rgba(248,113,113,0.2)}
+.btn-reset{background:var(--surface2);color:var(--text-dim);border:1px solid var(--border)}
+.btn-reset:hover:not(:disabled){color:var(--text);border-color:var(--muted)}
+.btn-cold{background:var(--cold-dim);color:var(--cold);border:1px solid rgba(56,189,248,0.3)}
+.btn-cold:hover:not(:disabled){background:rgba(56,189,248,0.22)}
+.btn-warm{background:var(--warm-dim);color:var(--warm);border:1px solid rgba(251,146,60,0.3)}
+.btn-off{background:var(--surface2);color:var(--text-dim);border:1px solid var(--border)}
+.btn-off:hover:not(:disabled){border-color:var(--muted);color:var(--text)}
+.power-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.power-label{font-size:12px;color:var(--text)}
+.toggle{position:relative;width:42px;height:24px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-track{position:absolute;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:background 0.25s}
+.toggle input:checked+.toggle-track{background:var(--green);border-color:var(--green)}
+.toggle-track::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;background:white;border-radius:50%;transition:transform 0.25s;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.toggle input:checked+.toggle-track::after{transform:translateX(18px)}
+#diag-bar{border-top:1px solid var(--border);background:var(--surface);padding:8px 14px 12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;flex-shrink:0}
+.diag-group{display:flex;align-items:center;gap:10px}
+.diag-divider{width:1px;height:28px;background:var(--border);flex-shrink:0}
+.diag-reading{display:flex;flex-direction:column;align-items:flex-start}
+.diag-val{font-family:var(--font-mono);font-size:15px;font-weight:500;line-height:1}
+.diag-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-top:2px}
+.relay-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;padding:5px 10px;transition:all 0.15s;font-family:var(--font-mono);color:var(--text-dim);min-width:60px}
+.relay-btn:hover{border-color:var(--muted);color:var(--text)}
+.relay-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(251,191,36,0.1)}
+.relay-icon{font-size:14px}
+.relay-name{font-size:9px;text-transform:uppercase;letter-spacing:0.08em}
+.relay-state{font-size:9px;color:inherit}
+/* ── TOOLS BUTTON ── */
+.tools-btn{display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;cursor:pointer;padding:5px 10px;font-family:var(--font-head);font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);transition:all 0.15s;white-space:nowrap;margin-left:8px}
+.tools-btn:hover{border-color:var(--muted);color:var(--text)}
+/* ── TOOLS MODAL ── */
+#tools-modal .modal{max-width:360px}
+.tools-list{display:flex;flex-direction:column;gap:8px;margin-bottom:0}
+.tool-item{display:flex;align-items:flex-start;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;cursor:pointer;transition:all 0.15s}
+.tool-item:hover{border-color:var(--muted)}
+.tool-item-icon{font-size:20px;flex-shrink:0;padding-top:1px}
+.tool-item-body{flex:1;min-width:0}
+.tool-item-title{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.tool-item-desc{font-size:11px;color:var(--text-dim);line-height:1.5}
+.tool-item.danger{border-color:rgba(248,113,113,0.2)}
+.tool-item.danger:hover{border-color:var(--red);background:var(--red-dim)}
+.tool-item.danger .tool-item-title{color:var(--red)}
+/* ── FLUSH CONFIRM MODAL ── */
+#flush-modal .modal{max-width:340px}
+.flush-entity-list{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:16px;display:flex;flex-direction:column;gap:5px}
+.flush-entity{font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px}
+.flush-entity::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0}
+/* ── SHARED MODAL STYLES ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:320px;width:90%;transform:translateY(10px);transition:transform 0.2s}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal h3{font-family:var(--font-head);font-size:16px;font-weight:700;margin-bottom:8px}
+.modal p{color:var(--text-dim);font-size:12px;line-height:1.6;margin-bottom:18px}
+.modal-buttons{display:flex;gap:8px}
+.modal-buttons button{flex:1;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-family:var(--font-head);font-size:12px;font-weight:700;padding:9px;transition:all 0.15s}
+.modal-cancel{background:var(--surface2);color:var(--text-dim)}
+.modal-cancel:hover{color:var(--text)}
+.modal-confirm{background:var(--warm-dim);color:var(--warm);border-color:rgba(251,146,60,0.4)}
+.modal-confirm:hover{background:rgba(251,146,60,0.2)}
+.modal-confirm-danger{background:var(--red-dim);color:var(--red);border-color:rgba(248,113,113,0.4)}
+.modal-confirm-danger:hover{background:rgba(248,113,113,0.2)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 18px;font-size:12px;color:var(--text);opacity:0;transition:all 0.3s;pointer-events:none;z-index:200;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (max-width:700px){#main{grid-template-columns:1fr;grid-template-rows:auto auto;flex:none}#chart-panel{border-right:none;border-bottom:1px solid var(--border);min-height:380px}#side-panel{max-height:none;overflow-y:visible}.chart-wrap{min-height:220px}#diag-bar{gap:10px}.time-remaining{font-size:17px}#app{height:auto;overflow:visible}body{overflow-x:hidden;overflow-y:auto}.stats-strip{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:420px){.status-indicators{display:none}.diag-divider{display:none}}
+.no-data{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-size:12px}
+.timeline-wrap{flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px}
+.timeline-title{font-family:var(--font-head);font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px}
+.timeline-bar-wrap{position:relative;height:20px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-bottom:4px}
+.timeline-segment{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;letter-spacing:0.06em;overflow:hidden;white-space:nowrap}
+.timeline-now{position:absolute;top:-3px;bottom:-3px;width:2px;background:white;border-radius:1px;z-index:2}
+.timeline-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);margin-top:4px}
+.run-stats,.cost-stats{flex-shrink:0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.run-stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.run-stat-val{font-family:var(--font-mono);font-size:18px;font-weight:500;line-height:1;color:var(--text)}
+.run-stat-lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-top:3px}
+.run-stat-sub{font-size:9px;color:var(--text-dim);margin-top:2px}
+/* ── OVER-TEMPERATURE BANNER ── */
+@keyframes overtempPulse{0%,100%{background:#cc0000}50%{background:#aa0000}}
+#overtemp-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#cc0000;padding:0 16px;height:46px;align-items:center;justify-content:space-between;gap:12px;border-bottom:2px solid #ff4444;font-family:'Syne',sans-serif}
+#overtemp-banner.active{display:flex;animation:overtempPulse 1.5s ease-in-out infinite}
+.overtemp-text{font-size:16px;font-weight:700;letter-spacing:0.1em;color:#fff;white-space:nowrap}
+.overtemp-temp{font-size:16px;color:#ffaaaa;margin-left:8px}
+.overtemp-dismiss{font-size:12px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.7);background:none;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:5px 12px;cursor:pointer;white-space:nowrap}
+.overtemp-active-shift{margin-top:46px}
+</style>
+</head>
+<body>
+<div id="config-bar" style="display:none">
+  <label>Enter your HA long-lived access token (saved for future visits):</label>
+  <input type="password" id="ha-token-manual" placeholder="eyJ0eXAiOiJKV1Qi...">
+  <button onclick="manualConnect()">Save &amp; Connect</button>
+</div>
+<div id="overtemp-banner">
+  <div class="overtemp-text">⚠ OVER-TEMPERATURE — ALL LOADS CUT<span class="overtemp-temp" id="overtemp-reading"></span></div>
+  <button class="overtemp-dismiss" onclick="dismissOvertemp()">Acknowledge</button>
+</div>
+
+<div id="app">
+  <div id="status-bar">
+    <div class="status-left">
+      <div class="phase-badge idle" id="phase-badge">IDLE</div>
+      <div>
+        <div class="time-remaining" id="time-remaining">--:--</div>
+        <div class="time-label" id="time-label">waiting</div>
+      </div>
+    </div>
+    <div class="status-indicators">
+      <div class="indicator"><div class="dot" id="dot-power"></div>Power</div>
+      <div class="indicator"><div class="dot" id="dot-esp"></div>ESPHome</div>
+      <div class="indicator"><div class="dot" id="dot-comp"></div>Compressor</div>
+      <div class="indicator"><div class="dot" id="dot-heat"></div>Heater</div>
+    </div>
+  </div>
+  <div id="main">
+    <div id="chart-panel">
+      <div class="chart-header">
+        <span class="chart-title">Temperature &amp; Humidity — Last 24h</span>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-swatch" style="background:#38bdf8"></div>Box Temp</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:#fb923c"></div>Dough Temp</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:#818cf8"></div>Humidity</div>
+        </div>
+      </div>
+      <div class="stats-strip">
+        <div class="stat-card"><div class="stat-val" id="stat-box-temp" style="color:var(--cold)">--.-°</div><div class="stat-lbl">Box temp</div><div class="stat-sub" id="stat-box-range">-- / --</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-dough-temp" style="color:var(--warm)">--.-°</div><div class="stat-lbl">Dough temp</div><div class="stat-sub" id="stat-dough-delta">Δ -- from box</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-humidity" style="color:#818cf8">--%</div><div class="stat-lbl">Humidity</div><div class="stat-sub" id="stat-hum-target">target: --</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-comp-cycles" style="color:var(--text)">--</div><div class="stat-lbl">Comp. cycles</div><div class="stat-sub" id="stat-comp-last">last: --m ago</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-cf-remaining" style="color:var(--text)">--</div><div class="stat-lbl" id="stat-phase-lbl">Phase</div><div class="stat-sub" id="stat-phase-end">ends --</div></div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="mainChart"></canvas>
+        <div class="no-data" id="chart-no-data" style="display:none">Connect to Home Assistant to load data</div>
+      </div>
+      <div class="timeline-wrap">
+        <div class="timeline-title">Fermentation timeline</div>
+        <div class="timeline-bar-wrap" id="timeline-bar"><div class="timeline-now" id="timeline-now" style="display:none"></div></div>
+        <div class="timeline-labels"><span id="tl-start">--</span><span id="tl-cf-end">CF ends --</span><span id="tl-wp-end">WP ends --</span></div>
+      </div>
+      <div class="run-stats">
+        <div class="run-stat"><div class="run-stat-val" id="rs-elapsed" style="color:var(--text-dim)">--</div><div class="run-stat-lbl">Elapsed</div><div class="run-stat-sub" id="rs-elapsed-sub">since CF start</div></div>
+        <div class="run-stat"><div class="run-stat-val" id="rs-cycles" style="color:var(--cold)">--</div><div class="run-stat-lbl">Comp. cycles</div><div class="run-stat-sub" id="rs-cycle-avg">avg -- min on</div></div>
+        <div class="run-stat"><div class="run-stat-val" id="rs-avg-temp" style="color:var(--cold)">--°</div><div class="run-stat-lbl">Avg box temp</div><div class="run-stat-sub" id="rs-temp-range">↓-- / ↑--</div></div>
+        <div class="run-stat"><div class="run-stat-val" id="rs-avg-hum" style="color:#818cf8">--%</div><div class="run-stat-lbl">Avg humidity</div><div class="run-stat-sub" id="rs-hum-range">↓-- / ↑--</div></div>
+      </div>
+      <div class="cost-stats">
+        <div class="run-stat"><div class="run-stat-val" id="cs-total" style="color:var(--green)">£--.--</div><div class="run-stat-lbl">Total cost</div><div class="run-stat-sub" id="cs-total-sub">-- kWh</div></div>
+        <div class="run-stat"><div class="run-stat-val" id="cs-comp" style="color:var(--cold)">£--.--</div><div class="run-stat-lbl">Compressor cost</div><div class="run-stat-sub" id="cs-comp-sub">-- min @ --W</div></div>
+        <div class="run-stat"><div class="run-stat-val" id="cs-heater" style="color:var(--warm)">£--.--</div><div class="run-stat-lbl">Heater cost</div><div class="run-stat-sub" id="cs-heater-sub">-- min @ --W</div></div>
+        <div class="run-stat"><div class="run-stat-val" id="cs-rate" style="color:var(--text-dim)">--p</div><div class="run-stat-lbl">Current rate</div><div class="run-stat-sub">per kWh</div></div>
+      </div>
+    </div>
+    <div id="side-panel">
+      <div class="panel-section">
+        <div class="section-title">Power</div>
+        <div class="power-row">
+          <span class="power-label">Doughbox mains</span>
+          <label class="toggle"><input type="checkbox" id="power-toggle" onchange="togglePower(this.checked)"><div class="toggle-track"></div></label>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="section-title">Schedule</div>
+        <div class="schedule-block">
+          <div class="schedule-row"><label>❄ Cold Ferment ends</label><div class="input-group"><input type="datetime-local" id="cf-end" onchange="setCfEnd()"></div></div>
+          <div class="schedule-row"><label>❄ CF target temp</label><div class="num-box"><button onclick="stepNum('cf-temp',-1)">−</button><input type="number" id="cf-temp" min="2" max="10" step="1" value="3" onchange="setCfTemp()"><span class="unit">°C</span><button onclick="stepNum('cf-temp',1)">+</button></div></div>
+          <div class="schedule-row"><label>🔥 RT proof ends</label><div class="input-group"><input type="datetime-local" id="wp-end" onchange="setWpEnd()"></div></div>
+          <div class="schedule-row"><label>🔥 RT target temp</label><div class="num-box"><button onclick="stepNum('wp-temp',-1)">−</button><input type="number" id="wp-temp" min="20" max="35" step="1" value="24" onchange="setWpTemp()"><span class="unit">°C</span><button onclick="stepNum('wp-temp',1)">+</button></div></div>
+          <div class="schedule-row"><label>🔥 RT duration</label><div class="num-box"><button onclick="stepNum('wp-hours',-0.5)">−</button><input type="number" id="wp-hours" min="1" max="8" step="0.5" value="4" onchange="setWpHours()"><span class="unit">hrs</span><button onclick="stepNum('wp-hours',0.5)">+</button></div></div>
+          <div class="schedule-row"><label>💧 Target humidity</label><div class="num-box"><button onclick="stepNum('hum-target',-5)">−</button><input type="number" id="hum-target" min="40" max="85" step="5" value="70" onchange="setHumidity()"><span class="unit">%</span><button onclick="stepNum('hum-target',5)">+</button></div></div>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="section-title">Controls</div>
+        <div class="btn-row">
+          <button class="btn btn-reset" id="btn-defaults" onclick="confirmReset()"><span class="btn-icon">📅</span>Set Weekend Schedule</button>
+          <button class="btn btn-start" id="btn-start" onclick="callScript('doughbox_start_fermentation')"><span class="btn-icon">▶</span>Start Cold Ferment</button>
+          <button class="btn btn-skip" id="btn-skip" onclick="callScript('doughbox_skip_to_room_temp_proof')"><span class="btn-icon">⏭</span>Skip to RT Proof</button>
+          <button class="btn btn-stop" id="btn-stop" onclick="callScript('doughbox_stop')" style="display:none"><span class="btn-icon">⏹</span>Stop Fermentation</button>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="section-title">Manual Climate</div>
+        <div class="btn-row">
+          <button class="btn btn-cold" onclick="setClimate('heat_cool',2,4)"><span class="btn-icon">❄</span>Cold Ferment (2–4°C)</button>
+          <button class="btn btn-warm" onclick="setClimate('heat_cool',23,25)"><span class="btn-icon">🔥</span>Room Temp (23–25°C)</button>
+          <button class="btn btn-off" onclick="setClimate('off',0,0)"><span class="btn-icon">○</span>Off</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="diag-bar">
+    <div class="diag-group">
+      <div class="diag-reading"><div class="diag-val" id="d-temp-avg" style="color:var(--cold)">--.-</div><div class="diag-lbl">Box °C</div></div>
+      <div class="diag-reading"><div class="diag-val" id="d-temp-dough" style="color:var(--warm)">--.-</div><div class="diag-lbl">Dough °C</div></div>
+      <div class="diag-reading"><div class="diag-val" id="d-humidity" style="color:#818cf8">--%</div><div class="diag-lbl">Humidity</div></div>
+    </div>
+    <div class="diag-divider"></div>
+    <div class="diag-group">
+      <button class="relay-btn" id="relay-heater" onclick="toggleRelay('doughbox_heater')"><span class="relay-icon">♨</span><span class="relay-name">Heater</span><span class="relay-state" id="rs-heater">OFF</span></button>
+      <button class="relay-btn" id="relay-comp" onclick="toggleRelay('doughbox_compressor')"><span class="relay-icon">❄</span><span class="relay-name">Compressor</span><span class="relay-state" id="rs-comp">OFF</span></button>
+      <button class="relay-btn" id="relay-dehum" onclick="toggleRelay('doughbox_dehumidifier')"><span class="relay-icon">💧</span><span class="relay-name">Dehumidifier</span><span class="relay-state" id="rs-dehum">OFF</span></button>
+    </div>
+    <div class="diag-divider"></div>
+    <div class="diag-group">
+      <div class="diag-reading"><div class="diag-val" id="d-target-low" style="color:var(--text-dim)">--</div><div class="diag-lbl">Target low</div></div>
+      <div class="diag-reading"><div class="diag-val" id="d-target-high" style="color:var(--text-dim)">--</div><div class="diag-lbl">Target high</div></div>
+      <div class="diag-reading"><div class="diag-val" id="d-hvac-action" style="color:var(--text-dim)">--</div><div class="diag-lbl">HVAC</div></div>
+      <button class="tools-btn" onclick="openTools()">⚙ Tools</button>
+    </div>
+  </div>
+  <div style="position:fixed;bottom:4px;right:6px;font-size:8px;color:var(--muted);pointer-events:none;z-index:1;" id="auth-src-lbl"></div>
+</div>
+
+<!-- ── SCHEDULE RESET MODAL ── -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3>📅 Reset Weekend Schedule?</h3>
+    <p>This will set the Cold Ferment end to next Saturday 12:00 and recalculate the RT end time. Any custom dates you've set will be overwritten.</p>
+    <div class="modal-buttons"><button class="modal-cancel" onclick="closeModal()">Cancel</button><button class="modal-confirm" onclick="doReset()">Yes, Reset</button></div>
+  </div>
+</div>
+
+<!-- ── TOOLS MODAL ── -->
+<div class="modal-overlay" id="tools-modal">
+  <div class="modal">
+    <h3>⚙ Tools</h3>
+    <p>Maintenance and diagnostic utilities.</p>
+    <div class="tools-list">
+      <div class="tool-item danger" onclick="openFlushConfirm()">
+        <div class="tool-item-icon">🗑</div>
+        <div class="tool-item-body">
+          <div class="tool-item-title">Flush Graph History</div>
+          <div class="tool-item-desc">Purges the last 24 hours of recorder data for box temp, dough temp, and humidity. Use to clear test noise before a real ferment run.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FLUSH CONFIRM MODAL ── -->
+<div class="modal-overlay" id="flush-modal">
+  <div class="modal">
+    <h3>🗑 Flush Graph History?</h3>
+    <p>Sets a cut-off point — the graph will only show data from this moment forward. Older data stays in the HA database untouched and will reappear if you clear your browser storage.</p>
+    <div class="flush-entity-list">
+      <div class="flush-entity">sensor.doughbox_temperature_average</div>
+      <div class="flush-entity">sensor.doughbox_humidity_average</div>
+      <div class="flush-entity">sensor.thermdoughprobe_temperature</div>
+    </div>
+    <div class="modal-buttons">
+      <button class="modal-cancel" onclick="closeFlushConfirm()">Cancel</button>
+      <button class="modal-confirm-danger" onclick="doFlush()">Purge History</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+// ── AUTH ─────────────────────────────────────────────────────────────
+const EMBEDDED_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyOGY1NDNiMjRhODA0M2E0Yjc5YzY5NjliODczZTk0MyIsImlhdCI6MTc3NTg2MzYyOCwiZXhwIjoyMDkxMjIzNjI4fQ.FR9y38M7fGBBEimiRaUwzMgssF7UKeR_mxNqNGRt0Oc';
+const HA_URL   = window.location.origin;
+let   HA_TOKEN = EMBEDDED_TOKEN || localStorage.getItem('db_token') || '';
+let overtempDismissed = false;
+let currentPhaseState = 'Idle';
+let currentPhaseStart = 0;
+const AUTH_SRC = EMBEDDED_TOKEN ? 'embedded' : (HA_TOKEN ? 'localStorage' : 'none');
+console.log('[doughbox] auth source:', AUTH_SRC);
+
+// ── COST CONFIG ──────────────────────────────────────────────────────
+const RATE_ENTITY   = 'sensor.octopus_energy_electricity_19k0200079_2198765140197_current_rate';
+const ENERGY_ENTITY = 'sensor.appliance_doughboxpower_energy';
+const POWER_ENTITY  = 'sensor.appliance_doughboxpower_power';
+const COST_WINDOW_HOURS = 72;
+
+function manualConnect() {
+  const t = document.getElementById('ha-token-manual').value.trim();
+  if (!t) return;
+  HA_TOKEN = t;
+  localStorage.setItem('db_token', t);
+  document.getElementById('config-bar').style.display = 'none';
+  toast('Token saved — loading data…');
+  startPolling();
+  loadHistory();
+}
+function autoAuth() { return !!HA_TOKEN; }
+
+function authHeaders() { return { Authorization: `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' }; }
+async function haGet(entity) { const r = await fetch(`${HA_URL}/api/states/${entity}`, { headers: authHeaders() }); if(!r.ok) throw new Error(`${r.status}`); return r.json(); }
+async function haSet(entity, state, attributes = {}) {
+  const domain = entity.split('.')[0];
+  const svc    = state === 'on' ? 'turn_on' : state === 'off' ? 'turn_off' : state;
+  await fetch(`${HA_URL}/api/services/${domain}/${svc}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ entity_id: entity, ...attributes }) });
+}
+async function haService(domain, service, data = {}) {
+  await fetch(`${HA_URL}/api/services/${domain}/${service}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) });
+}
+async function haHistory(entity, hours = 24) {
+  const end   = new Date();
+  const start = new Date(end - hours * 3600000);
+  const r = await fetch(`${HA_URL}/api/history/period/${start.toISOString()}?end_time=${end.toISOString()}&filter_entity_id=${entity}&minimal_response=true`, { headers: authHeaders() });
+  return r.json();
+}
+
+let pollTimer = null;
+function startPolling() { if (pollTimer) clearInterval(pollTimer); refresh(); pollTimer = setInterval(refresh, 30000); }
+
+async function refresh() {
+  if (!HA_TOKEN) return;
+  try {
+    const [power, heater, comp, dehum, phase, cfEnd, wpEnd, cfTemp, wpTemp, wpHours, humidity, tempAvg, tempDough, humAvg, climate] = await Promise.all([
+      haGet('switch.appliance_doughboxpower'), haGet('switch.doughbox_heater'), haGet('switch.doughbox_compressor'), haGet('switch.doughbox_dehumidifier'),
+      haGet('input_select.doughbox_current_phase'), haGet('input_datetime.doughbox_cold_ferment_end'), haGet('input_datetime.doughbox_warm_proof_end'),
+      haGet('input_number.doughbox_cold_ferment_temp'), haGet('input_number.doughbox_warm_proof_temp'), haGet('input_number.doughbox_warm_proof_hours'),
+      haGet('number.doughbox_target_humidity'), haGet('sensor.doughbox_temperature_average'), haGet('sensor.thermdoughprobe_temperature'),
+      haGet('sensor.doughbox_humidity_average'), haGet('climate.doughbox_climate'),
+    ]);
+    updateStatus(power, heater, comp, dehum, phase, cfEnd, wpEnd);
+    updateInputs(cfEnd, wpEnd, cfTemp, wpTemp, wpHours, humidity);
+    updateDiag(tempAvg, tempDough, humAvg, heater, comp, dehum, climate);
+    updateStats(tempAvg, tempDough, humAvg, phase, cfEnd, wpEnd);
+    updateTimeline(phase, cfEnd, wpEnd);
+    const overtempSensor = await haGet('binary_sensor.doughbox_over_temperature').catch(()=>null);
+    updateOvertemp(overtempSensor, tempAvg);
+  } catch(e) { console.warn('Refresh error:', e); }
+}
+
+function updateStatus(power, heater, comp, dehum, phase, cfEnd, wpEnd) {
+  setDot('dot-power', power.state);
+  setDot('dot-esp',   heater.state === 'unavailable' ? 'off' : 'on');
+  setDot('dot-comp',  comp.state === 'on' ? 'on' : 'off');
+  setDot('dot-heat',  heater.state === 'on' ? 'on' : 'off');
+  document.getElementById('power-toggle').checked = (power.state === 'on');
+  const p = phase.state;
+  currentPhaseState = p;
+  currentPhaseStart = phase.last_changed ? new Date(phase.last_changed).getTime() : 0;
+  const badge = document.getElementById('phase-badge');
+  badge.textContent = p.toUpperCase();
+  badge.className = 'phase-badge ' + (p === 'Cold Ferment' ? 'cold' : p === 'Warm Proof' ? 'warm' : p === 'Complete' ? 'complete' : 'idle');
+  const now = Date.now();
+  let endTs = null, label = 'next phase';
+  if (p === 'Cold Ferment') { endTs = new Date(cfEnd.state).getTime(); label = 'until warm proof'; }
+  if (p === 'Warm Proof')   { endTs = new Date(wpEnd.state).getTime(); label = 'until complete'; }
+  if (endTs && endTs > now) {
+    const rem = endTs - now;
+    const h = Math.floor(rem / 3600000), m = Math.floor((rem % 3600000) / 60000);
+    document.getElementById('time-remaining').textContent = `${h}h ${String(m).padStart(2,'0')}m`;
+    document.getElementById('time-label').textContent = label;
+  } else if (p === 'Complete') {
+    document.getElementById('time-remaining').textContent = 'Bake!';
+    document.getElementById('time-label').textContent = 'ready';
+  } else {
+    document.getElementById('time-remaining').textContent = '--';
+    document.getElementById('time-label').textContent = 'idle';
+  }
+  const active = phase.state !== 'Idle' && phase.state !== 'Complete';
+  document.getElementById('btn-stop').style.display  = active ? 'flex' : 'none';
+  document.getElementById('btn-start').style.display = active ? 'none' : 'flex';
+  document.getElementById('btn-skip').style.display  = active ? 'none' : 'flex';
+}
+
+function setDot(id, state) { const el = document.getElementById(id); el.className = 'dot ' + (state === 'on' ? 'on' : state === 'unavailable' ? 'warn' : 'off'); }
+
+function updateInputs(cfEnd, wpEnd, cfTemp, wpTemp, wpHours, humidity) {
+  setDateInput('cf-end', cfEnd.state); setDateInput('wp-end', wpEnd.state);
+  setNumIfUnfocused('cf-temp', parseFloat(cfTemp.state));
+  setNumIfUnfocused('wp-temp', parseFloat(wpTemp.state));
+  setNumIfUnfocused('wp-hours', parseFloat(wpHours.state));
+  setNumIfUnfocused('hum-target', parseFloat(humidity.state));
+}
+function setDateInput(id, isoVal) {
+  const el = document.getElementById(id);
+  if (document.activeElement === el) return;
+  const d = new Date(isoVal); if (isNaN(d)) return;
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  el.value = local.toISOString().slice(0, 16);
+}
+function setNumIfUnfocused(id, val) { const el = document.getElementById(id); if (document.activeElement !== el) el.value = val; }
+
+function updateDiag(tempAvg, tempDough, humAvg, heater, comp, dehum, climate) {
+  const fmt = (v, d=1) => isNaN(parseFloat(v)) ? '--' : parseFloat(v).toFixed(d);
+  document.getElementById('d-temp-avg').textContent   = fmt(tempAvg.state) + '°';
+  document.getElementById('d-temp-dough').textContent = fmt(tempDough.state) + '°';
+  document.getElementById('d-humidity').textContent   = fmt(humAvg.state, 0) + '%';
+  setRelay('relay-heater', 'rs-heater', heater.state);
+  setRelay('relay-comp',   'rs-comp',   comp.state);
+  setRelay('relay-dehum',  'rs-dehum',  dehum.state);
+  const attr = climate.attributes || {};
+  document.getElementById('d-target-low').textContent  = attr.target_temp_low  ? attr.target_temp_low + '°'  : '--';
+  document.getElementById('d-target-high').textContent = attr.target_temp_high ? attr.target_temp_high + '°' : '--';
+  document.getElementById('d-hvac-action').textContent = attr.hvac_action || climate.state || '--';
+}
+
+function updateStats(tempAvg, tempDough, humAvg, phase, cfEnd, wpEnd) {
+  const box = parseFloat(tempAvg.state), dough = parseFloat(tempDough.state), hum = parseFloat(humAvg.state);
+  document.getElementById('stat-box-temp').textContent   = isNaN(box)   ? '--.-°' : box.toFixed(1) + '°';
+  document.getElementById('stat-dough-temp').textContent = isNaN(dough) ? '--.-°' : dough.toFixed(1) + '°';
+  document.getElementById('stat-humidity').textContent   = isNaN(hum)   ? '--%'   : hum.toFixed(0) + '%';
+  if (!isNaN(box) && !isNaN(dough)) {
+    const delta = (dough - box).toFixed(1);
+    document.getElementById('stat-dough-delta').textContent = `Δ ${delta > 0 ? '+' : ''}${delta} vs box`;
+  }
+  const htgt = document.getElementById('hum-target').value;
+  document.getElementById('stat-hum-target').textContent = htgt ? `target: ${htgt}%` : '';
+  const p = phase.state, now = Date.now();
+  if (p === 'Cold Ferment' || p === 'Warm Proof') {
+    const endIso = (p === 'Cold Ferment' ? cfEnd : wpEnd).state;
+    const end = new Date(endIso).getTime(), rem = end - now;
+    if (rem > 0) {
+      const h = Math.floor(rem / 3600000), m = Math.floor((rem % 3600000) / 60000);
+      document.getElementById('stat-cf-remaining').textContent = `${h}h ${String(m).padStart(2,'0')}m`;
+    } else document.getElementById('stat-cf-remaining').textContent = 'Overdue';
+    document.getElementById('stat-phase-lbl').textContent = (p === 'Cold Ferment' ? 'CF' : 'RT') + ' remaining';
+    document.getElementById('stat-phase-end').textContent = 'ends ' + new Date(endIso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  } else {
+    document.getElementById('stat-cf-remaining').textContent = '--';
+    document.getElementById('stat-phase-lbl').textContent = 'Phase';
+    document.getElementById('stat-phase-end').textContent = p;
+  }
+}
+
+function updateCompStats(histData) {
+  const pts = histData[0] || [];
+  let cycles = 0, lastOnTime = null, prev = null;
+  for (const s of pts) {
+    if (prev === 'off' && s.state === 'on') { cycles++; lastOnTime = new Date(s.last_changed); }
+    prev = s.state;
+  }
+  document.getElementById('stat-comp-cycles').textContent = cycles || '--';
+  if (lastOnTime) {
+    const minsAgo = Math.floor((Date.now() - lastOnTime.getTime()) / 60000);
+    document.getElementById('stat-comp-last').textContent = minsAgo < 60 ? `last: ${minsAgo}m ago` : `last: ${Math.floor(minsAgo/60)}h ago`;
+  }
+}
+
+function updateTimeline(phase, cfEnd, wpEnd) {
+  const bar = document.getElementById('timeline-bar'), nowEl = document.getElementById('timeline-now');
+  if (!bar) return;
+  Array.from(bar.querySelectorAll('.timeline-segment')).forEach(e => e.remove());
+  const now = Date.now();
+  const cfEndTs = new Date(cfEnd.state).getTime(), wpEndTs = new Date(wpEnd.state).getTime();
+  const isActive = phase.state === 'Cold Ferment' || phase.state === 'Warm Proof';
+  if (!isActive || isNaN(cfEndTs) || isNaN(wpEndTs)) {
+    document.getElementById('tl-start').textContent = '--';
+    document.getElementById('tl-cf-end').textContent = 'CF ends --';
+    document.getElementById('tl-wp-end').textContent = 'WP ends --';
+    nowEl.style.display = 'none'; return;
+  }
+  const runStart = Math.min(now - 3600000, cfEndTs - 4 * 3600000);
+  const totalSpan = wpEndTs - runStart;
+  if (totalSpan <= 0) return;
+  const pct = v => Math.max(0, Math.min(100, ((v - runStart) / totalSpan) * 100));
+  const cfSeg = document.createElement('div');
+  cfSeg.className = 'timeline-segment';
+  cfSeg.style.cssText = `left:0%;width:${pct(cfEndTs)}%;background:rgba(56,189,248,0.25);color:#38bdf8`;
+  cfSeg.textContent = 'COLD FERMENT';
+  bar.appendChild(cfSeg);
+  const wpSeg = document.createElement('div');
+  wpSeg.className = 'timeline-segment';
+  wpSeg.style.cssText = `left:${pct(cfEndTs)}%;width:${pct(wpEndTs)-pct(cfEndTs)}%;background:rgba(251,146,60,0.25);color:#fb923c`;
+  wpSeg.textContent = 'RT PROOF';
+  bar.appendChild(wpSeg);
+  const nowPct = pct(now);
+  if (nowPct >= 0 && nowPct <= 100) { nowEl.style.left = nowPct + '%'; nowEl.style.display = 'block'; }
+  const fmt = ts => new Date(ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + ' ' + new Date(ts).toLocaleDateString([], {weekday:'short'});
+  document.getElementById('tl-start').textContent = fmt(runStart);
+  document.getElementById('tl-cf-end').textContent = 'CF ' + fmt(cfEndTs);
+  document.getElementById('tl-wp-end').textContent = 'WP ' + fmt(wpEndTs);
+}
+
+function updateRunStats(tempHistory, humHistory, compHistory) {
+  const tempPts = (tempHistory[0] || []).map(s => parseFloat(s.state)).filter(v => !isNaN(v));
+  const humPts  = (humHistory[0]  || []).map(s => parseFloat(s.state)).filter(v => !isNaN(v));
+  if (tempPts.length) {
+    const avg = tempPts.reduce((a,b)=>a+b,0)/tempPts.length, mn = Math.min(...tempPts), mx = Math.max(...tempPts);
+    document.getElementById('rs-avg-temp').textContent = avg.toFixed(1) + '°';
+    document.getElementById('rs-temp-range').textContent = `↓${mn.toFixed(1)} / ↑${mx.toFixed(1)}`;
+  }
+  if (humPts.length) {
+    const avg = humPts.reduce((a,b)=>a+b,0)/humPts.length, mn = Math.min(...humPts), mx = Math.max(...humPts);
+    document.getElementById('rs-avg-hum').textContent = avg.toFixed(0) + '%';
+    document.getElementById('rs-hum-range').textContent = `↓${mn.toFixed(0)} / ↑${mx.toFixed(0)}`;
+  }
+  const pts = (compHistory[0] || []);
+  let cycles = 0, totalOnMs = 0, lastOn = null;
+  for (const s of pts) {
+    if (s.state === 'on') lastOn = new Date(s.last_changed);
+    if (s.state === 'off' && lastOn) { totalOnMs += new Date(s.last_changed) - lastOn; cycles++; lastOn = null; }
+  }
+  document.getElementById('rs-cycles').textContent = cycles || '--';
+  if (cycles > 0) document.getElementById('rs-cycle-avg').textContent = `avg ${(totalOnMs/cycles/60000).toFixed(1)} min on`;
+  if (pts.length) {
+    const start = new Date(pts[0].last_changed);
+    const elapsedMs = Date.now() - start;
+    const eh = Math.floor(elapsedMs / 3600000), em = Math.floor((elapsedMs % 3600000) / 60000);
+    document.getElementById('rs-elapsed').textContent = `${eh}h ${String(em).padStart(2,'0')}m`;
+  }
+}
+
+function buildTimeline(powerHist, compHist, heaterHist, dehumHist) {
+  const events = [];
+  const add = (arr, kind) => (arr[0] || []).forEach(s => {
+    const t = new Date(s.last_changed).getTime();
+    if (isNaN(t)) return;
+    if (kind === 'power') {
+      const v = parseFloat(s.state);
+      if (!isNaN(v)) events.push({ t, kind, v });
+    } else {
+      events.push({ t, kind, v: s.state === 'on' });
+    }
+  });
+  add(powerHist, 'power'); add(compHist, 'comp'); add(heaterHist, 'heater'); add(dehumHist, 'dehum');
+  events.sort((a, b) => a.t - b.t);
+  return events;
+}
+
+function integrateCosts(events, endTs) {
+  let watts = NaN, comp = false, heater = false, dehum = false;
+  let prevT = events.length ? events[0].t : endTs;
+  for (const e of events) {
+    if (e.kind === 'power' && isNaN(watts)) watts = e.v;
+    else if (e.kind === 'comp')   comp   = e.v;
+    else if (e.kind === 'heater') heater = e.v;
+    else if (e.kind === 'dehum')  dehum  = e.v;
+    if (!isNaN(watts)) break;
+  }
+  watts = NaN; comp = false; heater = false; dehum = false;
+  const intervals = [];
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (i > 0) intervals.push({ dur: e.t - prevT, watts, comp, heater, dehum });
+    if (e.kind === 'power') watts = e.v;
+    else if (e.kind === 'comp')   comp   = e.v;
+    else if (e.kind === 'heater') heater = e.v;
+    else if (e.kind === 'dehum')  dehum  = e.v;
+    prevT = e.t;
+  }
+  intervals.push({ dur: endTs - prevT, watts, comp, heater, dehum });
+  const offWatts = intervals
+    .filter(iv => !iv.comp && !iv.heater && !iv.dehum && !isNaN(iv.watts))
+    .map(iv => iv.watts).sort((a, b) => a - b);
+  const baseline = offWatts.length ? offWatts[Math.floor(offWatts.length / 2)] : 0;
+  let compJms = 0, heaterJms = 0, compOnMs = 0, heaterOnMs = 0, compWsum = 0, compWn = 0, heaterWsum = 0, heaterWn = 0;
+  for (const iv of intervals) {
+    if (iv.dur <= 0 || isNaN(iv.watts)) continue;
+    const net = Math.max(0, iv.watts - baseline);
+    if (iv.comp && !iv.heater && !iv.dehum) {
+      compJms += net * iv.dur; compOnMs += iv.dur; compWsum += iv.watts; compWn++;
+    } else if (iv.heater && !iv.comp && !iv.dehum) {
+      heaterJms += net * iv.dur; heaterOnMs += iv.dur; heaterWsum += iv.watts; heaterWn++;
+    }
+  }
+  return {
+    baseline,
+    compKwh:   compJms   / 1000 / 3600000, compOnMs,   compAvgW:   compWn   ? compWsum   / compWn   : NaN,
+    heaterKwh: heaterJms / 1000 / 3600000, heaterOnMs, heaterAvgW: heaterWn ? heaterWsum / heaterWn : NaN,
+  };
+}
+
+function updateCostStats(powerHist, compHist, heaterHist, dehumHist, energyHist, rateState) {
+  const rate = parseFloat(rateState && rateState.state);
+  const rateOk = !isNaN(rate);
+  document.getElementById('cs-rate').textContent = rateOk ? (rate * 100).toFixed(1) + 'p' : '--p';
+  const events = buildTimeline(powerHist, compHist, heaterHist, dehumHist);
+  const res = integrateCosts(events, Date.now());
+  const fmtW  = w => isNaN(w) ? '--W' : Math.round(w) + 'W';
+  const fmtM  = ms => Math.round(ms / 60000) + ' min';
+  const fmtGBP = v => isNaN(v) ? '£--.--' : '£' + v.toFixed(2);
+  document.getElementById('cs-comp').textContent     = fmtGBP(rateOk ? res.compKwh * rate : NaN);
+  document.getElementById('cs-comp-sub').textContent = `${fmtM(res.compOnMs)} @ ${fmtW(res.compAvgW)}`;
+  document.getElementById('cs-heater').textContent     = fmtGBP(rateOk ? res.heaterKwh * rate : NaN);
+  document.getElementById('cs-heater-sub').textContent = `${fmtM(res.heaterOnMs)} @ ${fmtW(res.heaterAvgW)}`;
+  const ePts = (energyHist[0] || []).map(s => parseFloat(s.state)).filter(v => !isNaN(v));
+  if (ePts.length >= 2 && rateOk) {
+    const deltaKwh = Math.max(0, ePts[ePts.length - 1] - ePts[0]);
+    document.getElementById('cs-total').textContent     = '£' + (deltaKwh * rate).toFixed(2);
+    document.getElementById('cs-total-sub').textContent = `${deltaKwh.toFixed(2)} kWh · base ${Math.round(res.baseline)}W`;
+  } else {
+    document.getElementById('cs-total').textContent     = '£--.--';
+    document.getElementById('cs-total-sub').textContent = '-- kWh';
+  }
+}
+
+function setRelay(btnId, lblId, state) {
+  const btn = document.getElementById(btnId), lbl = document.getElementById(lblId);
+  btn.classList.toggle('active', state === 'on');
+  lbl.textContent = state === 'unavailable' ? 'N/A' : state.toUpperCase();
+}
+
+async function togglePower(on) { await haSet('switch.appliance_doughboxpower', on ? 'on' : 'off'); toast(on ? 'Doughbox powered on' : 'Doughbox powered off'); setTimeout(refresh, 1000); }
+async function toggleRelay(entity) { const s = await haGet(`switch.${entity}`); await haSet(`switch.${entity}`, s.state === 'on' ? 'off' : 'on'); setTimeout(refresh, 800); }
+async function callScript(name) { await haService('script', name); toast(`Script: ${name.replace(/_/g,' ')}`); setTimeout(refresh, 1500); }
+async function setClimate(mode, low, high) {
+  if (mode === 'off') await haService('climate', 'set_hvac_mode', { entity_id: 'climate.doughbox_climate', hvac_mode: 'off' });
+  else await haService('climate', 'set_temperature', { entity_id: 'climate.doughbox_climate', hvac_mode: mode, target_temp_low: low, target_temp_high: high });
+  toast('Climate updated'); setTimeout(refresh, 1000);
+}
+function stepNum(id, step) {
+  const el = document.getElementById(id), min = parseFloat(el.min), max = parseFloat(el.max);
+  el.value = Math.min(max, Math.max(min, parseFloat(el.value) + step));
+  el.dispatchEvent(new Event('change'));
+}
+async function setCfEnd()    { const v = document.getElementById('cf-end').value; if (!v) return; await haService('input_datetime','set_datetime',{entity_id:'input_datetime.doughbox_cold_ferment_end', datetime: new Date(v).toISOString().replace('T',' ').slice(0,19)}); }
+async function setWpEnd()    { const v = document.getElementById('wp-end').value; if (!v) return; await haService('input_datetime','set_datetime',{entity_id:'input_datetime.doughbox_warm_proof_end', datetime: new Date(v).toISOString().replace('T',' ').slice(0,19)}); }
+async function setCfTemp()   { await haService('input_number','set_value',{entity_id:'input_number.doughbox_cold_ferment_temp', value: parseFloat(document.getElementById('cf-temp').value)}); }
+async function setWpTemp()   { await haService('input_number','set_value',{entity_id:'input_number.doughbox_warm_proof_temp',  value: parseFloat(document.getElementById('wp-temp').value)}); }
+async function setWpHours()  { await haService('input_number','set_value',{entity_id:'input_number.doughbox_warm_proof_hours', value: parseFloat(document.getElementById('wp-hours').value)}); }
+async function setHumidity() { await haService('number',      'set_value',{entity_id:'number.doughbox_target_humidity',       value: parseFloat(document.getElementById('hum-target').value)}); }
+
+// ── MODALS ──────────────────────────────────────────────────────────
+function confirmReset() { document.getElementById('modal').classList.add('open'); }
+function closeModal()   { document.getElementById('modal').classList.remove('open'); }
+async function doReset() { closeModal(); await haService('script', 'doughbox_set_defaults'); toast('Schedule reset to next Saturday 12:00'); setTimeout(refresh, 1500); }
+document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+
+function openTools()  { document.getElementById('tools-modal').classList.add('open'); }
+function closeTools() { document.getElementById('tools-modal').classList.remove('open'); }
+document.getElementById('tools-modal').addEventListener('click', e => { if (e.target === document.getElementById('tools-modal')) closeTools(); });
+
+function openFlushConfirm()  { closeTools(); document.getElementById('flush-modal').classList.add('open'); }
+function closeFlushConfirm() { document.getElementById('flush-modal').classList.remove('open'); }
+document.getElementById('flush-modal').addEventListener('click', e => { if (e.target === document.getElementById('flush-modal')) closeFlushConfirm(); });
+
+function doFlush() {
+  closeFlushConfirm();
+  localStorage.setItem('db_flush_ts', Date.now().toString());
+  loadHistory();
+  toast('Graph history cleared ✓');
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2800); }
+
+// ── CHART ──────────────────────────────────────────────────────────
+let chart = null;
+function initChart() {
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [
+      { label: 'Box Temp (°C)',   data: [], borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', borderWidth: 1.5, pointRadius: 0, tension: 0, yAxisID: 'y', fill: true },
+      { label: 'Dough Temp (°C)', data: [], borderColor: '#fb923c', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0, yAxisID: 'y' },
+      { label: 'Humidity (%)',    data: [], borderColor: '#818cf8', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0, yAxisID: 'y2', borderDash: [4, 2] },
+    ]},
+    options: {
+      responsive: false, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1e26', borderColor: '#232836', borderWidth: 1,
+          titleColor: '#64748b', bodyColor: '#e2e8f0',
+          titleFont: { family: 'DM Mono', size: 10 }, bodyFont: { family: 'DM Mono', size: 12 },
+          callbacks: { title: items => { if(!items.length) return ''; const d=new Date(items[0].parsed.x),mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+' '+d.getDate()+' '+mn[d.getMonth()]; }, label: ctx => { const v = ctx.parsed.y; if (ctx.datasetIndex === 2) return ` ${v.toFixed(0)}% RH`; return ` ${v.toFixed(1)}°C`; } }
+        }
+      },
+      scales: {
+        x: { type: 'linear', grid: { color: '#1a1e26' }, ticks: { color: '#4a5166', font: { family: 'DM Mono', size: 10 }, maxTicksLimit: 8, callback: v => { const d=new Date(v),n=new Date(),mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return d.toDateString()!==n.toDateString() ? d.getDate()+' '+mn[d.getMonth()] : d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0'); } } },
+        y:  { type: 'linear', position: 'left',  min: 0,  max: 30,  grid: { color: '#1a1e26' }, ticks: { color: '#38bdf8', font: { family: 'DM Mono', size: 10 }, callback: v => v + '°', stepSize: 5 } },
+        y2: { type: 'linear', position: 'right', min: 30, max: 100, grid: { display: false },   ticks: { color: '#818cf8', font: { family: 'DM Mono', size: 10 }, callback: v => v + '%' } }
+      }
+    }
+  });
+}
+
+async function loadHistory() {
+  if (!HA_TOKEN) return;
+  if (!chart) { const nd=document.getElementById('chart-no-data'); nd.style.display='flex'; nd.textContent='Chart failed to initialise — WebView may be too old'; return; }
+  document.getElementById('chart-no-data').style.display = 'none';
+  try {
+    const [tempHist, doughHist, humHist] = await Promise.all([
+      haHistory('sensor.doughbox_temperature_average', 24),
+      haHistory('sensor.thermdoughprobe_temperature', 24),
+      haHistory('sensor.doughbox_humidity_average', 24),
+    ]);
+    const flushTs = parseInt(localStorage.getItem('db_flush_ts') || '0', 10);
+    const toPoints = (arr, maxPts = 300) => {
+      const raw = (arr[0] || [])
+        .filter(s => s.state !== 'unavailable' && s.state !== 'unknown' && s.state !== null)
+        .map(s => ({ x: new Date(s.last_changed).getTime(), y: parseFloat(s.state) }))
+        .filter(p => !isNaN(p.y) && p.x >= flushTs);
+      if (raw.length <= maxPts) return raw;
+      const step = Math.ceil(raw.length / maxPts);
+      return raw.filter((_, i) => i % step === 0);
+    };
+    chart.data.datasets[0].data = toPoints(tempHist);
+    chart.data.datasets[1].data = toPoints(doughHist);
+    chart.data.datasets[2].data = toPoints(humHist);
+
+    // ── X-AXIS BOUNDS ──────────────────────────────────────────────
+    const now = Date.now();
+    const WINDOW_MS = 24 * 3600 * 1000;
+    const isActive = currentPhaseState === 'Cold Ferment' || currentPhaseState === 'Warm Proof';
+    let xMin, xMax;
+    if (isActive && currentPhaseStart > 0) {
+      // Place ferment start at 10% from the left edge
+      const anchorMin = currentPhaseStart - 0.1 * WINDOW_MS;
+      const anchorMax = anchorMin + WINDOW_MS;
+      if (now <= anchorMax) {
+        // Data hasn't filled the window yet — keep start pinned at 10%
+        xMin = anchorMin;
+        xMax = anchorMax;
+      } else {
+        // Ferment is long enough to fill the window — scroll: now at right edge
+        xMin = now - WINDOW_MS;
+        xMax = now;
+      }
+    } else {
+      // Idle/Complete: standard last-24h window
+      xMin = now - WINDOW_MS;
+      xMax = now;
+    }
+    chart.options.scales.x.min = xMin;
+    chart.options.scales.x.max = xMax;
+    chart.update('none');
+
+    const compHist24 = await haHistory('switch.doughbox_compressor', 24);
+    updateCompStats(compHist24);
+    updateRunStats(tempHist, humHist, compHist24);
+    const [powerHistCost, compHistCost, heaterHistCost, dehumHistCost, energyHist, rateState] = await Promise.all([
+      haHistory(POWER_ENTITY,                   COST_WINDOW_HOURS),
+      haHistory('switch.doughbox_compressor',   COST_WINDOW_HOURS),
+      haHistory('switch.doughbox_heater',       COST_WINDOW_HOURS),
+      haHistory('switch.doughbox_dehumidifier', COST_WINDOW_HOURS),
+      haHistory(ENERGY_ENTITY,                  COST_WINDOW_HOURS),
+      haGet(RATE_ENTITY),
+    ]);
+    updateCostStats(powerHistCost, compHistCost, heaterHistCost, dehumHistCost, energyHist, rateState);
+  } catch(e) {
+    document.getElementById('chart-no-data').style.display = 'flex';
+    console.warn('History error:', e);
+  }
+}
+
+function sizeChart() {
+  const wrap = document.querySelector('.chart-wrap'), canvas = document.getElementById('mainChart');
+  if (!wrap || !canvas || !chart) return;
+  const w = wrap.clientWidth - 24, h = wrap.clientHeight - 24;
+  if (w < 10 || h < 10) return;
+  if (canvas.width === w && canvas.height === h) return;
+  canvas.width = w; canvas.height = h;
+  chart.canvas.width = w; chart.canvas.height = h;
+  chart.resize(w, h);
+}
+
+try { initChart(); } catch(e) { console.error('[doughbox] initChart failed:', e); }
+setTimeout(sizeChart, 100);
+setTimeout(sizeChart, 600);
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(sizeChart, 200); });
+
+if (autoAuth()) { startPolling(); loadHistory(); }
+else { document.getElementById('config-bar').style.display = 'flex'; document.getElementById('chart-no-data').style.display = 'flex'; }
+
+setInterval(() => { if (HA_URL && HA_TOKEN) loadHistory(); }, 900000);
+document.getElementById('auth-src-lbl').textContent = 'auth: ' + AUTH_SRC;
+
+function updateOvertemp(overtempSensor, tempAvg){
+  const firmwareFlag = overtempSensor && overtempSensor.state === 'on';
+  const box = parseFloat(tempAvg && tempAvg.state);
+  const fallbackFlag = !isNaN(box) && box > 30;
+  const isOvertemp = firmwareFlag || fallbackFlag;
+  const banner = document.getElementById('overtemp-banner');
+  const app    = document.getElementById('app');
+  if(isOvertemp && !overtempDismissed){
+    const reading = !isNaN(box) ? ' ' + box.toFixed(1) + '\u00b0C' : '';
+    document.getElementById('overtemp-reading').textContent = reading;
+    banner.classList.add('active');
+    app.classList.add('overtemp-active-shift');
+  } else if(!isOvertemp){
+    overtempDismissed = false;
+    banner.classList.remove('active');
+    app.classList.remove('overtemp-active-shift');
+  }
+}
+function dismissOvertemp(){
+  overtempDismissed = true;
+  document.getElementById('overtemp-banner').classList.remove('active');
+  document.getElementById('app').classList.remove('overtemp-active-shift');
+}
+</script>
+</body>
+</html>
