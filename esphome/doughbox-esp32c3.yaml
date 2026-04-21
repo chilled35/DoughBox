@@ -348,6 +348,58 @@ interval:
   - interval: 5s
     then:
       - lambda: |-
+          // ── ANTICIPATORY COMPRESSOR CUTOFF ──────────────────────────────
+          // Derived from measured coast data (2026-04-21): mean 1.79°C,
+          // max 2.01°C overshoot after relay opens. COAST_OFFSET of 1.6°C
+          // gives a predicted landing of ~2.8°C (mean) vs 3.0°C target_low,
+          // eliminating the previous 1.5–2.0°C undershoot.
+          // Bang-bang thermostat remains the authority — this is a layer on top.
+          const float COAST_OFFSET = 1.6f;
+          static float prev_temp = NAN;
+          static unsigned long comp_on_since = 0;
+
+          if (!id(dough_temp).has_state() || std::isnan(id(dough_temp).state)) {
+            prev_temp = NAN;
+            return;
+          }
+
+          float current = id(dough_temp).state;
+
+          if (!id(compressor_relay).state) {
+            prev_temp = current;
+            comp_on_since = 0;
+            return;
+          }
+
+          if (comp_on_since == 0) {
+            comp_on_since = millis();
+          }
+
+          unsigned long run_secs = (millis() - comp_on_since) / 1000;
+          if (run_secs < 30) {
+            prev_temp = current;
+            return;
+          }
+
+          float cutoff_point = id(dough_climate).target_temperature_low + COAST_OFFSET;
+          bool falling = !std::isnan(prev_temp) && (current < prev_temp);
+
+          if (current <= cutoff_point && falling) {
+            id(compressor_relay).turn_off();
+            ESP_LOGI("anticipate",
+                     "Early cutoff at %.2f°C (target_low %.1f + coast %.1f) after %lus — coasting to ~%.1f°C",
+                     current, id(dough_climate).target_temperature_low, COAST_OFFSET,
+                     run_secs, current - COAST_OFFSET);
+          }
+
+          prev_temp = current;
+
+  - interval: 5s
+    then:
+      - lambda: |-
+          // ── SENSOR WATCHDOG ─────────────────────────────────────────────
+          // If both BME280s return NaN for 6 consecutive ticks (30s),
+          // cut all loads and publish an MQTT alert.
           static int nan_ticks = 0;
           static bool alert_sent = false;
           bool temp_ok = id(dough_temp).has_state() && !std::isnan(id(dough_temp).state);
