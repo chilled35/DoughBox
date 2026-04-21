@@ -1,15 +1,3 @@
-- id: '1776472713116'
-  alias: Unlock Fire Tablet
-  triggers:
-  - topic: fully/fire_tablet/event
-    value_template: '{{ value_json.event }}'
-    payload: screenOn
-    trigger: mqtt
-  actions:
-  - delay:
-      seconds: 1
-  - action: shell_command.unlock_fire_tablet
-  mode: restart
 - id: '1776500000001'
   alias: Doughbox - Over-temperature Alert
   description: Fires when ESPHome firmware declares box above 30C. Critical iOS push bypasses DND.
