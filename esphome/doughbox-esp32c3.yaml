@@ -46,24 +46,24 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  reboot_timeout: 0s
+  reboot_timeout: 6h
   ap:
     ssid: "Doughbox Fallback Hotspot"
     password: "Eirkv9vxy3mv"
 
 captive_portal:
 
-# web_server is disabled — the built-in HTTP server consumes a significant
-# portion of the ESP32-C3's 400KB SRAM. Re-enable temporarily for on-device
-# debugging by uncommenting the two lines below and reflashing.
-# web_server:
-#   port: 80
+web_server:
+  port: 80
 
+# ----------------------------------------------------------------------------
+# MQTT: publish state, subscribe to remote commands
+# ----------------------------------------------------------------------------
 mqtt:
   broker: 192.168.0.210
   username: mosquitto
   password: mosquitto
-  discovery: false
+  discovery: false                # don't auto-create HA entities; the API does that
   birth_message:
     topic: doughbox/status
     payload: online
@@ -76,7 +76,9 @@ mqtt:
     topic: doughbox/cmd
     then:
       - lambda: |-
-          if (x["cmd"].isNull()) {
+          // Expected JSON: {"cmd":"start","low":3.0,"high":5.0}
+          // or:            {"cmd":"stop"}
+          if (!x.containsKey("cmd")) {
             ESP_LOGW("mqtt", "Cmd missing 'cmd' field");
             return;
           }
@@ -169,13 +171,13 @@ sensor:
     unit_of_measurement: "°C"
     accuracy_decimals: 1
     lambda: |-
-      float t1 = id(dough_temp_1).has_state() ? id(dough_temp_1).state : NAN;
-      float t2 = id(dough_temp_2).has_state() ? id(dough_temp_2).state : NAN;
-      bool ok1 = !std::isnan(t1);
-      bool ok2 = !std::isnan(t2);
-      if (ok1 && ok2) return (t1 + t2) / 2.0f;
-      if (ok1) return t1;
-      if (ok2) return t2;
+      if (id(dough_temp_1).has_state() && id(dough_temp_2).has_state()) {
+        return (id(dough_temp_1).state + id(dough_temp_2).state) / 2.0;
+      } else if (id(dough_temp_1).has_state()) {
+        return id(dough_temp_1).state;
+      } else if (id(dough_temp_2).has_state()) {
+        return id(dough_temp_2).state;
+      }
       return NAN;
     update_interval: 5s
 
@@ -186,13 +188,13 @@ sensor:
     accuracy_decimals: 0
     icon: "mdi:water-percent"
     lambda: |-
-      float h1 = id(dough_humidity_1).has_state() ? id(dough_humidity_1).state : NAN;
-      float h2 = id(dough_humidity_2).has_state() ? id(dough_humidity_2).state : NAN;
-      bool ok1 = !std::isnan(h1);
-      bool ok2 = !std::isnan(h2);
-      if (ok1 && ok2) return (h1 + h2) / 2.0f;
-      if (ok1) return h1;
-      if (ok2) return h2;
+      if (id(dough_humidity_1).has_state() && id(dough_humidity_2).has_state()) {
+        return (id(dough_humidity_1).state + id(dough_humidity_2).state) / 2.0;
+      } else if (id(dough_humidity_1).has_state()) {
+        return id(dough_humidity_1).state;
+      } else if (id(dough_humidity_2).has_state()) {
+        return id(dough_humidity_2).state;
+      }
       return NAN;
     update_interval: 5s
 
@@ -203,9 +205,9 @@ sensor:
     accuracy_decimals: 1
     icon: "mdi:thermometer-lines"
     lambda: |-
-      float t1 = id(dough_temp_1).has_state() ? id(dough_temp_1).state : NAN;
-      float t2 = id(dough_temp_2).has_state() ? id(dough_temp_2).state : NAN;
-      if (!std::isnan(t1) && !std::isnan(t2)) return t1 - t2;
+      if (id(dough_temp_1).has_state() && id(dough_temp_2).has_state()) {
+        return id(dough_temp_1).state - id(dough_temp_2).state;
+      }
       return NAN;
     update_interval: 5s
 
@@ -230,11 +232,11 @@ sensor:
         return 0;
       }
       unsigned long elapsed = (millis() - last_off_time) / 1000;
-      if (elapsed >= 240) {
+      if (elapsed >= 300) {
         return 0;
       }
-      return 240 - elapsed;
-    update_interval: 5s
+      return 300 - elapsed;
+    update_interval: 1s
 
   - platform: wifi_signal
     name: "WiFi Signal"
@@ -345,87 +347,8 @@ interval:
             }
           }
 
-  - interval: 5s
-    then:
-      - lambda: |-
-          // ── ANTICIPATORY COMPRESSOR CUTOFF ──────────────────────────────
-          // Derived from measured coast data (2026-04-21): mean 1.79°C,
-          // max 2.01°C overshoot after relay opens. COAST_OFFSET of 1.6°C
-          // gives a predicted landing of ~2.8°C (mean) vs 3.0°C target_low,
-          // eliminating the previous 1.5–2.0°C undershoot.
-          // Bang-bang thermostat remains the authority — this is a layer on top.
-          const float COAST_OFFSET = 1.6f;
-          static float prev_temp = NAN;
-          static unsigned long comp_on_since = 0;
-
-          if (!id(dough_temp).has_state() || std::isnan(id(dough_temp).state)) {
-            prev_temp = NAN;
-            return;
-          }
-
-          float current = id(dough_temp).state;
-
-          if (!id(compressor_relay).state) {
-            prev_temp = current;
-            comp_on_since = 0;
-            return;
-          }
-
-          if (comp_on_since == 0) {
-            comp_on_since = millis();
-          }
-
-          unsigned long run_secs = (millis() - comp_on_since) / 1000;
-          if (run_secs < 30) {
-            prev_temp = current;
-            return;
-          }
-
-          float cutoff_point = id(dough_climate).target_temperature_low + COAST_OFFSET;
-          bool falling = !std::isnan(prev_temp) && (current < prev_temp);
-
-          if (current <= cutoff_point && falling) {
-            id(compressor_relay).turn_off();
-            ESP_LOGI("anticipate",
-                     "Early cutoff at %.2f°C (target_low %.1f + coast %.1f) after %lus — coasting to ~%.1f°C",
-                     current, id(dough_climate).target_temperature_low, COAST_OFFSET,
-                     run_secs, current - COAST_OFFSET);
-          }
-
-          prev_temp = current;
-
-  - interval: 5s
-    then:
-      - lambda: |-
-          // ── SENSOR WATCHDOG ─────────────────────────────────────────────
-          // If both BME280s return NaN for 6 consecutive ticks (30s),
-          // cut all loads and publish an MQTT alert.
-          static int nan_ticks = 0;
-          static bool alert_sent = false;
-          bool temp_ok = id(dough_temp).has_state() && !std::isnan(id(dough_temp).state);
-          bool hum_ok  = id(dough_humidity).has_state() && !std::isnan(id(dough_humidity).state);
-          if (!temp_ok && !hum_ok) {
-            nan_ticks++;
-            if (nan_ticks >= 6 && !alert_sent) {
-              id(heater_relay).turn_off();
-              id(compressor_relay).turn_off();
-              id(dehumidifier_relay).turn_off();
-              alert_sent = true;
-              ESP_LOGE("sensor", "BOTH BME280s FAILED for 30s — all loads cut");
-              auto &mqtt = *esphome::mqtt::global_mqtt_client;
-              mqtt.publish(std::string("doughbox/alert"), std::string("{\"type\":\"sensor_fail\",\"msg\":\"Both BME280s failed for 30s - all loads cut\"}"), (uint8_t)0, false);
-            }
-          } else {
-            if (alert_sent) {
-              ESP_LOGI("sensor", "Sensor recovery detected");
-              auto &mqtt = *esphome::mqtt::global_mqtt_client;
-              mqtt.publish(std::string("doughbox/alert"), std::string("{\"type\":\"sensor_recovery\",\"msg\":\"BME280 sensors recovered\"}"), (uint8_t)0, false);
-            }
-            nan_ticks = 0;
-            alert_sent = false;
-          }
-
-  - interval: 10s
+  # MQTT state publish: every 2s, retained so remote gets last state on connect
+  - interval: 2s
     then:
       - mqtt.publish_json:
           topic: doughbox/state
@@ -458,6 +381,7 @@ climate:
     id: dough_climate
     sensor: dough_temp
     default_preset: Home
+    on_boot_restore_from: default_preset
     visual:
       min_temperature: 2
       max_temperature: 35
@@ -466,7 +390,7 @@ climate:
     min_heating_run_time: 5s
     heat_deadband: 0.5
     heat_overrun: 0.3
-    min_cooling_off_time: 240s
+    min_cooling_off_time: 300s
     min_cooling_run_time: 5s
     cool_deadband: 0.5
     cool_overrun: 0.3
@@ -484,27 +408,14 @@ climate:
     heat_cool_mode:
       - switch.turn_off: heater_relay
       - switch.turn_off: compressor_relay
-    on_state:
-      - lambda: |-
-          static int   last_mode = -1;
-          static float last_low  = -999.0f;
-          static float last_high = -999.0f;
-          int   cur_mode = (id(dough_climate).mode == climate::CLIMATE_MODE_HEAT_COOL) ? 1 : 0;
-          float cur_low  = id(dough_climate).target_temperature_low;
-          float cur_high = id(dough_climate).target_temperature_high;
-          if (cur_mode == last_mode && cur_low == last_low && cur_high == last_high) return;
-          last_mode = cur_mode; last_low = cur_low; last_high = cur_high;
-          doughbox_prefs::save_all(cur_mode ? 1.0f : 0.0f, cur_low, cur_high);
-          ESP_LOGI("climate", "Prefs saved: mode=%s low=%.1f high=%.1f",
-                   cur_mode ? "HEAT_COOL" : "OFF", cur_low, cur_high);
     preset:
       - name: Home
         default_target_temperature_low: 4
         default_target_temperature_high: 6
         mode: "off"
       - name: "Cold Ferment"
-        default_target_temperature_low: 3
-        default_target_temperature_high: 5
+        default_target_temperature_low: 2.5
+        default_target_temperature_high: 4.5
         mode: heat_cool
       - name: "Room Temp"
         default_target_temperature_low: 20
