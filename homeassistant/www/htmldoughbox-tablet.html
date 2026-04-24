@@ -642,10 +642,12 @@ body{
 const EMBEDDED_TOKEN='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyOGY1NDNiMjRhODA0M2E0Yjc5YzY5NjliODczZTk0MyIsImlhdCI6MTc3NTg2MzYyOCwiZXhwIjoyMDkxMjIzNjI4fQ.FR9y38M7fGBBEimiRaUwzMgssF7UKeR_mxNqNGRt0Oc';
 const HA_URL=window.location.origin;
 let HA_TOKEN=EMBEDDED_TOKEN||localStorage.getItem('db_token')||'';
-const RATE_ENTITY  ='sensor.octopus_energy_electricity_19k0200079_2198765140197_current_rate';
-const ENERGY_ENTITY='sensor.appliance_doughboxpower_energy';
-const POWER_ENTITY ='sensor.appliance_doughboxpower_power';
-const COST_WINDOW_HOURS=72;
+const RATE_ENTITY      ='sensor.octopus_energy_electricity_19k0200079_2198765140197_current_rate';
+const COST_WINDOW_HOURS= 72;
+// Fixed known wattages — no live power metering
+const COMP_W  = 65;   // compressor
+const HEAT_W  = 500;  // ceramic heater
+const CTRL_W  = 5;    // controller quiescent
 
 function manualConnect(){const t=document.getElementById('ha-token-manual').value.trim();if(!t)return;HA_TOKEN=t;localStorage.setItem('db_token',t);document.getElementById('config-bar').style.display='none';toast('Connected');historyLoaded=false;startPolling();startIdleTimer();}
 function autoAuth(){return!!HA_TOKEN;}
@@ -1028,15 +1030,12 @@ async function loadHistory(){
     drawChart();if(kioskActive)drawKioskChart();
     const compHist=await haHistory('switch.doughbox_compressor',hours);
     updateRunStats(tempHist,humHist,compHist);
-    const[powerHist,compHistC,heaterHist,dehumHist,energyHist,rateState]=await Promise.all([
-      haHistory(POWER_ENTITY,COST_WINDOW_HOURS),
+    const[compHistC,heaterHistC]=await Promise.all([
       haHistory('switch.doughbox_compressor',COST_WINDOW_HOURS),
       haHistory('switch.doughbox_heater',COST_WINDOW_HOURS),
-      haHistory('switch.doughbox_dehumidifier',COST_WINDOW_HOURS),
-      haHistory(ENERGY_ENTITY,COST_WINDOW_HOURS),
-      haGet(RATE_ENTITY),
     ]);
-    updateCostStats(powerHist,compHistC,heaterHist,dehumHist,energyHist,rateState);
+    const rateState = await haGet(RATE_ENTITY).catch(()=>null);
+    updateCostStats(compHistC,heaterHistC,rateState);
   }catch(e){document.getElementById('chart-no-data').style.display='flex';console.warn('History:',e);}
 }
 
@@ -1051,31 +1050,46 @@ function updateRunStats(tempHist,humHist,compHist){
   if(cycles>0)document.getElementById('rs-cycle-avg').textContent=`avg ${(totalOnMs/cycles/60000).toFixed(1)}m`;
   if(pts.length){const start=new Date(pts[0].last_changed),elMs=Date.now()-start,eh=Math.floor(elMs/3600000),em=Math.floor((elMs%3600000)/60000);document.getElementById('rs-elapsed').textContent=`${eh}h ${String(em).padStart(2,'0')}m`;}
 }
-function buildTimeline(ph,ch,hh,dh){
-  const ev=[];const add=(arr,kind)=>(arr[0]||[]).forEach(s=>{const t=new Date(s.last_changed).getTime();if(isNaN(t))return;if(kind==='power'){const v=parseFloat(s.state);if(!isNaN(v))ev.push({t,kind,v});}else ev.push({t,kind,v:s.state==='on'});});
-  add(ph,'power');add(ch,'comp');add(hh,'heater');add(dh,'dehum');ev.sort((a,b)=>a.t-b.t);return ev;
+// ── FIXED-WATTAGE COST ENGINE ─────────────
+// No power metering. Runtime × known watts × live Octopus rate.
+function switchRuntimeMs(history){
+  const evs=(history[0]||[]).filter(s=>s.state==='on'||s.state==='off');
+  let total=0, lastOn=null;
+  for(const e of evs){
+    if(e.state==='on') lastOn=new Date(e.last_changed).getTime();
+    else if(e.state==='off'&&lastOn){ total+=new Date(e.last_changed).getTime()-lastOn; lastOn=null; }
+  }
+  if(lastOn) total+=Date.now()-lastOn; // still running
+  return total;
 }
-function integrateCosts(events,endTs){
-  let watts=NaN,comp=false,heater=false,dehum=false,prevT=events.length?events[0].t:endTs;
-  const iv=[];
-  for(let i=0;i<events.length;i++){const e=events[i];if(i>0)iv.push({dur:e.t-prevT,watts,comp,heater,dehum});if(e.kind==='power')watts=e.v;else if(e.kind==='comp')comp=e.v;else if(e.kind==='heater')heater=e.v;else if(e.kind==='dehum')dehum=e.v;prevT=e.t;}
-  iv.push({dur:endTs-prevT,watts,comp,heater,dehum});
-  const off=iv.filter(x=>!x.comp&&!x.heater&&!x.dehum&&!isNaN(x.watts)).map(x=>x.watts).sort((a,b)=>a-b);
-  const base=off.length?off[Math.floor(off.length/2)]:0;
-  let cJ=0,hJ=0,cMs=0,hMs=0,cWs=0,cWn=0,hWs=0,hWn=0;
-  for(const x of iv){if(x.dur<=0||isNaN(x.watts))continue;const net=Math.max(0,x.watts-base);if(x.comp&&!x.heater&&!x.dehum){cJ+=net*x.dur;cMs+=x.dur;cWs+=x.watts;cWn++;}else if(x.heater&&!x.comp&&!x.dehum){hJ+=net*x.dur;hMs+=x.dur;hWs+=x.watts;hWn++;}}
-  return{compKwh:cJ/1000/3600000,compOnMs:cMs,compAvgW:cWn?cWs/cWn:NaN,heaterKwh:hJ/1000/3600000,heaterOnMs:hMs,heaterAvgW:hWn?hWs/hWn:NaN};
-}
-function updateCostStats(ph,ch,hh,dh,eh,rateState){
-  const rate=parseFloat(rateState&&rateState.state),ok=!isNaN(rate);
-  const rs=ok?(rate*100).toFixed(1)+'p':'--p';
-  document.getElementById('cs-rate').textContent=rs;document.getElementById('d-rate').textContent=rs;
-  const res=integrateCosts(buildTimeline(ph,ch,hh,dh),Date.now());
-  const fW=w=>isNaN(w)?'--W':Math.round(w)+'W',fM=ms=>Math.round(ms/60000)+'m',fG=v=>isNaN(v)?'£--.--':'£'+v.toFixed(2);
-  document.getElementById('cs-comp').textContent=fG(ok?res.compKwh*rate:NaN);document.getElementById('cs-comp-sub').textContent=`${fM(res.compOnMs)} @ ${fW(res.compAvgW)}`;
-  document.getElementById('cs-heater').textContent=fG(ok?res.heaterKwh*rate:NaN);document.getElementById('cs-heater-sub').textContent=`${fM(res.heaterOnMs)} @ ${fW(res.heaterAvgW)}`;
-  const eP=(eh[0]||[]).map(s=>parseFloat(s.state)).filter(v=>!isNaN(v));
-  if(eP.length>=2&&ok){const d=Math.max(0,eP[eP.length-1]-eP[0]),total=d*rate;document.getElementById('cs-total').textContent='£'+total.toFixed(2);document.getElementById('cs-total-sub').textContent=`${d.toFixed(2)} kWh`;document.getElementById('d-cost').textContent='£'+total.toFixed(2);}
+
+function updateCostStats(compHistC,heaterHistC,rateState){
+  const rate=parseFloat(rateState&&rateState.state), ok=!isNaN(rate)&&rate>0;
+  document.getElementById('cs-rate').textContent = ok?(rate*100).toFixed(1)+'p':'--p';
+  document.getElementById('d-rate').textContent  = ok?(rate*100).toFixed(1)+'p':'--p';
+
+  const compMs  = switchRuntimeMs(compHistC);
+  const heatMs  = switchRuntimeMs(heaterHistC);
+  const ctrlMs  = COST_WINDOW_HOURS * 3600000;
+
+  const compKwh  = compMs  / 3600000 * COMP_W  / 1000;
+  const heatKwh  = heatMs  / 3600000 * HEAT_W  / 1000;
+  const ctrlKwh  = ctrlMs  / 3600000 * CTRL_W  / 1000;
+  const totalKwh = compKwh + heatKwh + ctrlKwh;
+
+  const fM  = ms=>{const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>0?`${h}h ${m}m`:`${m}m`;};
+  const fGBP= (kwh)=>ok?'£'+(kwh*rate).toFixed(2):'--';
+
+  // Runtime + wattage always visible
+  document.getElementById('cs-comp-sub').textContent   = `${fM(compMs)} @ ${COMP_W}W`;
+  document.getElementById('cs-heater-sub').textContent = `${fM(heatMs)} @ ${HEAT_W}W`;
+  document.getElementById('cs-total-sub').textContent  = `${totalKwh.toFixed(3)} kWh`;
+
+  // £ values — shown if rate available, otherwise '--'
+  document.getElementById('cs-comp').textContent   = fGBP(compKwh);
+  document.getElementById('cs-heater').textContent = fGBP(heatKwh);
+  document.getElementById('cs-total').textContent  = ok?'£'+(totalKwh*rate).toFixed(2):'£--.--';
+  document.getElementById('d-cost').textContent    = ok?'£'+(totalKwh*rate).toFixed(2):`${totalKwh.toFixed(2)}kWh`;
 }
 
 // ── BOOT ──────────────────────────────────
