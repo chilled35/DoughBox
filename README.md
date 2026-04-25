@@ -1,6 +1,6 @@
 # 🍕 DoughBox
 
-A repurposed domestic refrigerator converted into a precision fermentation controller for cold-proofing pizza and bread dough. The DoughBox provides active temperature, humidity, and climate control managed by a custom PCB, ESPHome firmware, and Home Assistant automations — with a bespoke HTML dashboard served via Fully Kiosk Browser on a wall-mounted Lenovo M8 tablet.
+A repurposed domestic refrigerator converted into a precision fermentation controller for cold-proofing pizza and bread dough. The DoughBox provides active temperature and climate control managed by a custom PCB, ESPHome firmware, and Home Assistant automations — with a bespoke HTML dashboard served via Fully Kiosk Browser on a wall-mounted Lenovo M8 tablet.
 
 ---
 
@@ -21,9 +21,9 @@ A repurposed domestic refrigerator converted into a precision fermentation contr
 
 ## Overview
 
-The DoughBox is a full-stack maker project spanning custom PCB hardware, embedded firmware, and home automation software. The primary use case is cold-proofing pizza dough at 4°C with a secondary warm-proof stage at ~24°C, with a scheduled fermentation controller that transitions between stages automatically.
+The DoughBox is a full-stack maker project spanning custom PCB hardware, embedded firmware, and home automation software. The primary use case is cold-proofing pizza dough at 3°C with a secondary warm-proof stage at ~24°C, with a scheduled fermentation controller that transitions between stages automatically.
 
-Climate control uses bang-bang (on/off) logic implemented in ESPHome's `thermostat` platform — this has proven reliable and is intentionally kept simple. Future work includes predictive anticipatory cutoff layered on top (see [Known Issues & Deferred Work](#known-issues--deferred-work)), but the bang-bang controller is the production control loop and is not to be replaced.
+Climate control uses bang-bang (on/off) logic implemented in ESPHome's `thermostat` platform. A predictive heater cutoff layer prevents overshoot during the CT→RT transition — this fires early based on an empirically derived thermal coast delta and is implemented in firmware, not HA.
 
 ---
 
@@ -36,7 +36,7 @@ Custom PCB designed in EasyEDA, fabricated by JLCPCB.
 | Reference | Component | Notes |
 |---|---|---|
 | U1 | Seeed XIAO ESP32-C3 | Castellated module, single core, Wi-Fi |
-| U2, U3 | *(formerly P82B96DR I2C bus extenders)* | **Permanently abandoned** — see deferred work |
+| U2, U3 | *(formerly P82B96DR I2C bus extenders)* | **Permanently removed** — do not refit |
 | BME280 ×2 | Temperature / Humidity / Pressure sensors | I2C addresses 0x76 and 0x77, short local bus only |
 | Q1 | AO3401A P-channel MOSFET (SOT-23) | Gate driven via NPN level-shifter; +5V gate pull-up |
 | Relay module | 4-channel SRD-05VDC-SL-C type | Active-HIGH logic via integrated optocoupler/NPN driver |
@@ -44,12 +44,12 @@ Custom PCB designed in EasyEDA, fabricated by JLCPCB.
 
 ### Controlled Loads
 
-| Load | Switch Entity | Notes |
-|---|---|---|
-| Compressor | `switch.doughbox_compressor` | 5-minute restart lockout after turn-off |
-| Ceramic fan heater (500 W) | `switch.doughbox_heater` | Interlocked with compressor; blocked above 28°C |
-| Dehumidifier | `switch.doughbox_dehumidifier` | Humidity bang-bang, 30 s interval |
-| Mains power (Zigbee smart plug) | `switch.appliance_doughboxpower` | Power monitoring; **current plug faulty (~2 W reading)** |
+| Load | Switch Entity | Rated Power | Notes |
+|---|---|---|---|
+| Compressor | `switch.doughbox_compressor` | 65 W | 5-minute restart lockout after turn-off |
+| Ceramic fan heater | `switch.doughbox_heater` | 500 W | Interlocked with compressor; firmware blocks turn-on above 28°C |
+| Dehumidifier | `switch.doughbox_dehumidifier` | — | Humidity bang-bang, 30 s interval |
+| Mains power (Zigbee smart plug) | `switch.appliance_doughboxpower` | — | Relay switching only — no power metering used |
 
 ### Relay Logic
 
@@ -57,7 +57,7 @@ All relay GPIOs use `inverted: false` in ESPHome. The integrated optocoupler/NPN
 
 ### Remote Display
 
-A **Lenovo M8 tablet** running **Fully Kiosk Browser** in kiosk mode, pointed at `http://192.168.0.210:8123/local/htmldoughbox-tablet.html`. This is the primary user interface. There is no local OLED display; no ribbon cable; no I2C bus extenders fitted.
+A **Lenovo M8 tablet (TB8505F, 1280×800)** running **Fully Kiosk Browser** in kiosk mode, pointed at `http://192.168.0.210:8123/local/htmldoughbox-tablet.html`. This is the primary user interface. There is no local OLED display; no ribbon cable; no I2C bus extenders fitted.
 
 ### Network
 
@@ -75,14 +75,14 @@ A **Lenovo M8 tablet** running **Fully Kiosk Browser** in kiosk mode, pointed at
 DoughBox/
 ├── README.md
 ├── esphome/
-│   ├── doughbox-esp32c3.yaml       # Controller firmware (ESPHome)
+│   ├── esphome-web-90e2ac.yaml     # Controller firmware (ESPHome)
 │   └── doughbox_prefs.h            # NVS flash persistence (mode, temp setpoints)
 └── homeassistant/
-    ├── automations_doughbox.yaml   # Doughbox section of automations.yaml
+    ├── automations_doughbox.yaml   # Doughbox automations (append to automations.yaml)
     ├── lovelace/
-    │   └── doughbox_dashboard.yaml # Lovelace/Mushroom YAML dashboard
+    │   └── doughbox_dashboard.yaml # Lovelace panel dashboard
     └── www/
-        ├── htmldoughbox.html       # Mobile/phone HTML dashboard
+        ├── htmldoughbox.html       # Mobile/desktop HTML dashboard
         └── htmldoughbox-tablet.html # Tablet (Lenovo M8) HTML dashboard
 ```
 
@@ -90,7 +90,7 @@ DoughBox/
 
 | File | HA Path |
 |---|---|
-| `doughbox-esp32c3.yaml` | `/config/esphome/doughbox-esp32c3.yaml` |
+| `esphome-web-90e2ac.yaml` | `/config/esphome/esphome-web-90e2ac.yaml` |
 | `doughbox_prefs.h` | `/config/esphome/doughbox_prefs.h` |
 | `automations_doughbox.yaml` | Append contents to `/config/automations.yaml` |
 | `doughbox_dashboard.yaml` | `/config/lovelace/` (or paste into dashboard YAML editor) |
@@ -101,21 +101,26 @@ DoughBox/
 
 ## ESPHome Firmware
 
-**File:** `esphome/doughbox-esp32c3.yaml`
+**File:** `esphome/esphome-web-90e2ac.yaml`
 
 ### Key features
 
 - Dual BME280 sensors (0x76, 0x77) publishing individual and averaged temperature/humidity entities
 - `thermostat` climate platform (`climate.doughbox_climate`) with `HEAT_COOL` mode and bang-bang control
-- Compressor restart lockout (5 min) implemented as a template sensor + heater interlock
-- Heater blocked above 28°C to prevent thermal runaway during CT→RT transitions
+- **Cold Ferment preset:** `low: 2.5°C / high: 4.5°C` — centred on 3°C operating target
+- **Warm Proof preset:** `low: 26°C / high: 28°C`
+- Compressor restart lockout: `min_cooling_off_time: 300s` (5 minutes)
+- Heater/compressor interlock — cannot run simultaneously
+- **Heater turn-on guard:** firmware blocks heater activation if box temp > 28°C (prevents thermal runaway regardless of instruction source)
+- **Over-temperature protection:** `binary_sensor.doughbox_over_temperature` — triggers above 30°C, immediately cuts all loads via `on_press` lambda. Hard limit enforced in firmware independent of HA
+- **Predictive heater cutoff:** 5-second interval lambda cuts heater when `current_temp + 7.0°C ≥ target_temp_high`. Derived from empirical thermal coast data (loaded box: +6.53°C coast; empty box: +7.5°C coast). Prevents the 500W heater overshooting target during CT→RT transition
 - Humidity bang-bang controller (30 s interval) driving the dehumidifier relay
 - Flash persistence via `doughbox_prefs.h` — saves mode and temperature setpoints to NVS so the controller resumes after a power cut without HA intervention
-- Boot relay suppression: GPIO9 holds the relay board power rail LOW during startup; raised after GPIO initialisation to prevent relay chatter at power-on
-- Sensor watchdog: if both BME280s return NaN for ≥30 s, all loads are cut and an MQTT alert is published to `doughbox/alert`
-- MQTT broker integration for sensor failure/recovery alerts (broker: 192.168.0.210)
-- `reboot_timeout: 0s` — WiFi loss does not trigger an ESP reboot (prevents climate state loss mid-ferment)
+- Boot relay suppression: GPIO9 holds the relay board power rail LOW during startup; raised after GPIO initialisation to prevent relay chatter
+- MQTT integration for out-of-band state publish (`doughbox/state`, 2s interval) and command receipt (`doughbox/cmd`)
+- `reboot_timeout: 6h` — short WiFi losses do not trigger ESP reboot
 - OTA updates enabled
+- Web server on port 80 (diagnostic access via `http://doughbox.local`)
 
 ### Companion header: `doughbox_prefs.h`
 
@@ -138,14 +143,11 @@ Both BME280s are on a short local bus. The P82B96DR bus extenders (U2/U3) are pe
 
 ## Home Assistant Integration
 
-The ESPHome node integrates via the native ESPHome API (not MQTT for sensor data). The MQTT broker is used only for out-of-band alerts (`doughbox/alert` topic).
+The ESPHome node integrates via the native ESPHome API (not MQTT for sensor data). The MQTT broker is used only for out-of-band state publish and command receipt.
 
 ### Input helpers required
 
 ```yaml
-input_boolean:
-  doughbox_schedule_active:
-
 input_select:
   doughbox_current_phase:
     options: [Idle, Cold Ferment, Warm Proof, Complete]
@@ -159,7 +161,7 @@ input_number:
     min: 1
     max: 10
     step: 0.5
-    initial: 4
+    initial: 2.5
   doughbox_warm_proof_temp:
     min: 18
     max: 30
@@ -170,32 +172,49 @@ input_number:
     max: 12
     step: 0.5
     initial: 4
+
+number:
+  # published by ESPHome
+  doughbox_target_humidity:
+    min: 40
+    max: 85
+    step: 5
+    initial: 70
 ```
 
 ---
 
 ## Dashboards
 
+Both dashboards share the same HA REST API authentication pattern: an embedded Long-Lived Access Token (LLAT) constant `EMBEDDED_TOKEN` with `localStorage` fallback.
+
 ### Mobile dashboard (`htmldoughbox.html`)
 
-Standalone HTML page served from HA's `/local/` directory. Authenticates via an embedded Long-Lived Access Token (LLAT) constant `EMBEDDED_TOKEN` with localStorage fallback. Features:
+Standalone HTML page served from HA's `/local/` directory.
 
-- Live temperature/humidity chart (Chart.js) with rolling history
+**Features:**
+- Live temperature/humidity chart (Chart.js) with 24-hour rolling history
 - Fermentation schedule controls (cold ferment end datetime, warm proof duration/temp)
 - Manual start/skip/stop buttons calling HA scripts
 - Relay status strip (compressor, heater, dehumidifier, mains power)
 - Dough probe temperature
-- Cost tracking card (Octopus Agile tariff integration — **currently disabled pending replacement Zigbee plug**)
-- Overtemperature banner (fires if box temp >30°C or firmware flag set)
-- Cache-bust via version query string (`?v=N`) — increment on each deployment
+- Cost tracking — fixed-wattage model: compressor 65W, heater 500W, controller 5W × runtime, × live Octopus Agile rate
+- Over-temperature banner (fires if `binary_sensor.doughbox_over_temperature` is `on`, or if box temp > 30°C as fallback)
 
-**Access:** `http://192.168.0.210:8123/local/htmldoughbox.html?v=N`
+**Access:** `http://192.168.0.210:8123/local/htmldoughbox.html`
 
 ### Tablet dashboard (`htmldoughbox-tablet.html`)
 
-Optimised layout for the Lenovo M8 (Fully Kiosk Browser, landscape). Larger chart, touch-friendly controls. Same auth pattern as the mobile dashboard.
+Optimised for Lenovo M8 TB8505F (1280×800) running Fully Kiosk Browser in landscape.
 
-**Access:** `http://192.168.0.210:8123/local/htmldoughbox-tablet.html?v=N`
+**Features (in addition to mobile):**
+- Full-width chart dominating the right panel
+- **Kiosk/distance mode** — after 10 seconds idle, auto-transitions to a full-screen view with 112px temperature figures, 20px axis labels, and status dots readable from across the kitchen. Tap anywhere to return
+- Phase-aware chart history window: 12h during Cold Ferment, 4h during Warm Proof, 24h when idle
+- Over-temperature banner present in both normal and kiosk views
+- Bioluminescent colour scheme: teal (#00e5cc) / sea-green (#00ff87) / purple (#7b5ea7) on abyss black (#030d14)
+
+**Access:** `http://192.168.0.210:8123/local/htmldoughbox-tablet.html`
 
 ### HA push notification target
 
@@ -211,7 +230,7 @@ Optimised layout for the Lenovo M8 (Fully Kiosk Browser, landscape). Larger char
 
 | Script | Action |
 |---|---|
-| `script.doughbox_start_fermentation` | Sets phase to Cold Ferment, activates schedule, sets climate setpoints from `input_number` helpers |
+| `script.doughbox_start_fermentation` | Sets phase to Cold Ferment, activates schedule, sets climate setpoints |
 | `script.doughbox_skip_to_room_temp_proof` | Transitions to Warm Proof at 24°C for 4 hours |
 | `script.doughbox_stop` | Cancels schedule, sets phase to Idle, turns climate off |
 | `script.doughbox_set_defaults` | Resets schedule datetimes to next Saturday 12:00 |
@@ -220,10 +239,13 @@ Optimised layout for the Lenovo M8 (Fully Kiosk Browser, landscape). Larger char
 
 | Automation | Trigger | Action |
 |---|---|---|
-| `doughbox_ct_to_warm_proof` | `input_datetime.doughbox_cold_ferment_end` time reached | Calls `script.doughbox_skip_to_room_temp_proof` |
-| `doughbox_ct_to_warm_proof_startup_catchup` | HA start, if CT end time already passed | Calls `script.doughbox_skip_to_room_temp_proof` |
-| `doughbox_warm_proof_to_complete` | `input_datetime.doughbox_warm_proof_end` time reached | Sets phase Complete, turns climate off |
-| `doughbox_warm_proof_to_complete_startup_catchup` | HA start, if WP end time already passed | Sets phase Complete, turns climate off |
+| `doughbox_ct_to_warm_proof` | `input_datetime.doughbox_cold_ferment_end` reached | Calls `script.doughbox_skip_to_room_temp_proof` |
+| `doughbox_ct_to_warm_proof_startup_catchup` | HA start, if CT end already passed | Calls `script.doughbox_skip_to_room_temp_proof` |
+| `doughbox_warm_proof_to_complete` | `input_datetime.doughbox_warm_proof_end` reached | Sets phase Complete, turns climate off |
+| `doughbox_warm_proof_to_complete_startup_catchup` | HA start, if WP end already passed | Sets phase Complete, turns climate off |
+| `doughbox_over_temperature_alert` | `binary_sensor.doughbox_over_temperature` → `on` | Critical iOS push notification (bypasses DND) |
+| `doughbox_over_temperature_persistent` | Same sensor `on` for 5+ minutes | Second critical push notification |
+| `doughbox_over_temperature_cleared` | `binary_sensor.doughbox_over_temperature` → `off` | All-clear notification, dismisses lock screen alert |
 | `doughbox_sensor_failure_alert` | MQTT `doughbox/alert` → `sensor_fail` | Critical iOS push notification |
 | `doughbox_sensor_recovery_alert` | MQTT `doughbox/alert` → `sensor_recovery` | Standard iOS push notification |
 
@@ -236,32 +258,36 @@ Optimised layout for the Lenovo M8 (Fully Kiosk Browser, landscape). Larger char
 | `climate.doughbox_climate` | Main climate controller |
 | `sensor.doughbox_temperature_average` | Average of both BME280 temperature readings |
 | `sensor.doughbox_humidity_average` | Average of both BME280 humidity readings |
-| `sensor.thermdoughprobe_temperature` | Dough probe temperature (separate sensor) |
+| `sensor.thermdoughprobe_temperature` | Dough probe temperature (NTC, separate sensor) |
+| `binary_sensor.doughbox_over_temperature` | Firmware-declared over-temp flag (fires above 30°C) |
 | `switch.doughbox_compressor` | Compressor relay |
 | `switch.doughbox_heater` | Ceramic fan heater relay |
 | `switch.doughbox_dehumidifier` | Dehumidifier relay |
-| `switch.appliance_doughboxpower` | Zigbee mains power switch |
-| `sensor.appliance_doughboxpower_power` | Instantaneous power draw (W) |
-| `sensor.appliance_doughboxpower_energy` | Cumulative energy (kWh) |
-| `sensor.octopus_energy_electricity_19k0200079_2198765140197_current_rate` | Octopus Agile current unit rate (£/kWh) |
+| `switch.appliance_doughboxpower` | Zigbee mains power switch (relay only, no metering) |
+| `sensor.doughbox_compressor_lockout_remaining` | Seconds remaining on compressor restart lockout |
+| `input_select.doughbox_current_phase` | Current fermentation phase (Idle / Cold Ferment / Warm Proof / Complete) |
+| `input_datetime.doughbox_cold_ferment_end` | Scheduled CF end timestamp |
+| `input_datetime.doughbox_warm_proof_end` | Scheduled WP end timestamp |
+| `input_number.doughbox_cold_ferment_temp` | Target temperature for cold ferment |
+| `input_number.doughbox_warm_proof_temp` | Target temperature for room-temp proof |
+| `input_number.doughbox_warm_proof_hours` | RT proof duration in hours |
+| `number.doughbox_target_humidity` | Target humidity setpoint |
+| `sensor.octopus_energy_electricity_19k0200079_2198765140197_current_rate` | Live Octopus Agile electricity rate (£/kWh) |
 
 ---
 
 ## Known Issues & Deferred Work
 
-### Active / in progress
-
-- **Faulty Zigbee smart plug** — replacement on order. Reads ~2W regardless of load. Cost-tracking dashboard cards are disabled until a working plug is verified. If instantaneous-W readings remain unreliable on the new plug, the cost algorithm should fall back to energy-sensor delta at relay state-change boundaries.
-
 ### Deferred hardware
 
-- **I2C bus extenders (U2/U3 / P82B96DR)** — permanently abandoned. The original design used these to buffer a 2-metre I2C run to a remote OLED display. The remote display is now the Lenovo M8 tablet via Fully Kiosk Browser. Both BME280s run on a short local bus with no extenders. Do not refit U2/U3.
-- **ILI9341 3.2" TFT (240×320, SPI, resistive touch)** — noted as a future display upgrade. Explicitly deferred until current hardware is finalised.
-- **PCF8574 I2C GPIO expander** — noted as an elegant future approach for encoding front-panel button presses locally. Deferred.
+- **PCF8574 I2C GPIO expander** — noted as an elegant future approach for encoding front-panel button presses locally, reducing wiring complexity. Not currently planned.
 
-### Future firmware work
+### Notes
 
-- **Predictive anticipatory cutoff** — profile heating and cooling rates from collected run data to enable early relay cutoff and reduce overshoot. The fan heater (500 W ceramic) overshoots significantly during CT→RT transitions. The bang-bang controller is to remain intact; anticipatory cutoff is a layer on top, not a replacement.
+- **I2C bus extenders (U2/U3 / P82B96DR)** — permanently removed. The original design used these to buffer a 2-metre I2C run to a remote OLED display. The remote display is now the Lenovo M8 tablet. Both BME280s run on a short local bus. Do not refit U2/U3.
+- **ILI9341 3.2" TFT display** — previously noted as a future upgrade. Abandoned in favour of the Lenovo M8 tablet as the sole display interface.
+- **Zigbee smart plug power metering** — the plug is dismembered and fitted inside the controller casework for relay switching only. Power metering is not used. Cost tracking uses fixed known wattages (compressor 65W, heater 500W, controller 5W) × relay runtime × live Octopus Agile rate.
+- **Predictive heater cutoff** — implemented in firmware (v2, fixed-delta approach). Empirically derived from loaded-box run data (1.75kg dough, 65% hydration): coast rise +6.53°C. `COAST_DELTA = 7.0°C` with safety margin. Fires when `current_temp + 7.0 ≥ target_temp_high`.
 
 ---
 
@@ -274,9 +300,9 @@ Optimised layout for the Lenovo M8 (Fully Kiosk Browser, landscape). Larger char
    wifi_password: "YourPassword"
    ```
 3. The LLAT in `htmldoughbox.html` and `htmldoughbox-tablet.html` is specific to the HA instance. Generate a new one via **HA Profile → Long-Lived Access Tokens** if deploying to a different instance.
-4. Bump the `?v=N` query string in any Lovelace `webpage` card URL each time the HTML dashboards are updated, to bust the Fully Kiosk / Companion app WebView cache.
-5. Home Assistant logs in UTC. The installation is UK-based (GMT/BST). Verify timezone offset when correlating log timestamps against real-world events.
-6. The compressor interlock prevents simultaneous compressor and heater operation. The lockout applies to restarts only, not initial run.
+4. Home Assistant logs in UTC. The installation is UK-based (GMT/BST). Verify timezone offset when correlating log timestamps against real-world events.
+5. The compressor interlock prevents simultaneous compressor and heater operation. The lockout (`min_cooling_off_time: 300s`) applies to restarts only, not initial run.
+6. The natural compressor off-time in steady-state CT operation is approximately 30 minutes — well above the 5-minute lockout minimum. The lockout is a safety floor, not a cycle control mechanism.
 
 ---
 
