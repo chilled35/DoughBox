@@ -327,17 +327,6 @@ number:
     optimistic: true
     restore_value: true
 
-globals:
-  # Predictive heater cutoff — track previous temp reading and timestamp
-  - id: heat_prev_temp
-    type: float
-    restore_value: false
-    initial_value: '0.0'
-  - id: heat_prev_time
-    type: unsigned long
-    restore_value: false
-    initial_value: '0'
-
 interval:
   - interval: 30s
     then:
@@ -359,60 +348,36 @@ interval:
           }
 
 
-  # Predictive heater cutoff — runs every 10s when heater is ON
-  # Calculates rate of temperature rise and cuts heater early if the
-  # predicted temperature (current + rate × coast_window) will exceed
-  # the target_high setpoint. Prevents the 8°C overshoot seen on RT proof.
-  - interval: 10s
+  # Predictive heater cutoff — runs every 5s when heater is ON
+  # Uses a fixed thermal coast delta derived from empirical data:
+  #   Loaded box (1.75kg dough): +6.53°C coast after heater cut
+  #   Empty box:                 +7.5°C coast after heater cut
+  # COAST_DELTA = 7.0°C gives safe margin for both loaded and empty.
+  # Fires when: current_temp + COAST_DELTA >= target_temp_high
+  # This is more reliable than rate-based prediction because the coast
+  # is driven by heater element thermal mass, not by heating rate.
+  - interval: 5s
     then:
       - lambda: |-
-          static const float COAST_MINUTES = 3.0f;  // empirical: ~3 min thermal coast after cutoff
+          static const float COAST_DELTA = 7.0f;  // empirical coast rise + 0.47°C safety margin
 
           float current = id(dough_temp).state;
           if (isnan(current)) return;
 
-          unsigned long now_ms = millis();
-
-          // When heater is OFF, just keep rolling the reference point
-          if (!id(heater_relay).state) {
-            id(heat_prev_temp) = current;
-            id(heat_prev_time) = now_ms;
-            return;
-          }
-
-          // Heater is ON — calculate rate of rise
-          unsigned long elapsed_ms = now_ms - id(heat_prev_time);
-
-          // Need at least 20s of data before acting
-          if (elapsed_ms < 20000 || id(heat_prev_time) == 0) {
-            id(heat_prev_temp) = current;
-            id(heat_prev_time) = now_ms;
-            return;
-          }
-
-          float rate_per_min = (current - id(heat_prev_temp)) / (elapsed_ms / 60000.0f);
-
-          // Only act on a positive (rising) rate
-          if (rate_per_min <= 0.0f) {
-            id(heat_prev_temp) = current;
-            id(heat_prev_time) = now_ms;
-            return;
-          }
+          // Only act when heater is actively ON
+          if (!id(heater_relay).state) return;
 
           float target_high = id(dough_climate).target_temperature_high;
-          float predicted   = current + (rate_per_min * COAST_MINUTES);
+          float cutoff_at   = target_high - COAST_DELTA;
 
-          ESP_LOGD("predictive", "Heater ON: temp=%.1f rate=%.2f/min predicted=%.1f target=%.1f",
-                   current, rate_per_min, predicted, target_high);
+          ESP_LOGD("predictive", "Heater ON: temp=%.1f cutoff_at=%.1f target_high=%.1f",
+                   current, cutoff_at, target_high);
 
-          if (predicted >= target_high) {
+          if (current >= cutoff_at) {
             id(heater_relay).turn_off();
-            ESP_LOGW("predictive", "EARLY CUTOFF: temp=%.1f rate=%.2f/min predicted=%.1f >= target=%.1f",
-                     current, rate_per_min, predicted, target_high);
+            ESP_LOGW("predictive", "EARLY CUTOFF: temp=%.1f >= cutoff_at=%.1f (target_high=%.1f - delta=%.1f)",
+                     current, cutoff_at, target_high, COAST_DELTA);
           }
-
-          id(heat_prev_temp) = current;
-          id(heat_prev_time) = now_ms;
 
   # MQTT state publish: every 2s, retained so remote gets last state on connect
   - interval: 2s
