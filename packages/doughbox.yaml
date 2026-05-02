@@ -1,0 +1,367 @@
+# Doughbox Controller - Home Assistant Package
+# Place in config/packages/doughbox.yaml
+
+input_select:
+  doughbox_current_phase:
+    name: "Doughbox Current Phase"
+    options:
+      - Idle
+      - Cold Ferment
+      - Warm Proof
+      - Complete
+    initial: Idle
+    icon: mdi:bread-slice
+
+input_boolean:
+  doughbox_schedule_active:
+    name: "Doughbox Schedule Active"
+    icon: mdi:calendar-check
+
+input_datetime:
+  doughbox_cold_ferment_end:
+    name: "Cold Ferment End"
+    has_date: true
+    has_time: true
+    icon: mdi:snowflake-thermometer
+
+  doughbox_warm_proof_end:
+    name: "Warm Proof End"
+    has_date: true
+    has_time: true
+    icon: mdi:thermometer-high
+
+input_number:
+  doughbox_cold_ferment_temp:
+    name: "Cold Ferment Temperature"
+    min: 2
+    max: 10
+    step: 1
+    initial: 3
+    unit_of_measurement: "°C"
+    icon: mdi:snowflake
+
+  doughbox_warm_proof_temp:
+    name: "Warm Proof Temperature"
+    min: 20
+    max: 30
+    step: 1
+    initial: 24
+    unit_of_measurement: "°C"
+    icon: mdi:fire
+
+  doughbox_warm_proof_hours:
+    name: "Warm Proof Duration"
+    min: 1
+    max: 8
+    step: 0.5
+    initial: 4
+    unit_of_measurement: "hours"
+    icon: mdi:timer-outline
+
+template:
+  - sensor:
+      - name: "Doughbox Cold Ferment Time Remaining"
+        unique_id: doughbox_cold_ferment_time_remaining
+        state: >
+          {% set end = states('input_datetime.doughbox_cold_ferment_end') %}
+          {% if end and states('input_select.doughbox_current_phase') == 'Cold Ferment' %}
+            {% set remaining = as_timestamp(end) - now().timestamp() %}
+            {% if remaining > 0 %}
+              {% set hours = (remaining // 3600) | int %}
+              {% set minutes = ((remaining % 3600) // 60) | int %}
+              {{ hours }}h {{ minutes }}m
+            {% else %}
+              Complete
+            {% endif %}
+          {% else %}
+            --
+          {% endif %}
+        icon: mdi:timer-sand
+
+      - name: "Doughbox Warm Proof Time Remaining"
+        unique_id: doughbox_warm_proof_time_remaining
+        state: >
+          {% set end = states('input_datetime.doughbox_warm_proof_end') %}
+          {% if end and states('input_select.doughbox_current_phase') == 'Warm Proof' %}
+            {% set remaining = as_timestamp(end) - now().timestamp() %}
+            {% if remaining > 0 %}
+              {% set hours = (remaining // 3600) | int %}
+              {% set minutes = ((remaining % 3600) // 60) | int %}
+              {{ hours }}h {{ minutes }}m
+            {% else %}
+              Complete
+            {% endif %}
+          {% else %}
+            --
+          {% endif %}
+        icon: mdi:timer-sand
+
+automation:
+  # ── Keeps WP end in sync when CF end datetime changes ──────────────
+  - id: doughbox_sync_warm_proof_on_cold_change
+    alias: "Doughbox - Sync Warm Proof When Cold Ferment Changes"
+    trigger:
+      - platform: state
+        entity_id: input_datetime.doughbox_cold_ferment_end
+    action:
+      - action: input_datetime.set_datetime
+        entity_id: input_datetime.doughbox_warm_proof_end
+        data:
+          datetime: >
+            {% set cf_end = states('input_datetime.doughbox_cold_ferment_end') %}
+            {% set end_ts = as_timestamp(cf_end) + (states('input_number.doughbox_warm_proof_hours') | float * 3600) %}
+            {{ end_ts | timestamp_custom('%Y-%m-%d %H:%M:%S') }}
+
+  # ── Keeps WP end in sync when duration changes ─────────────────────
+  - id: doughbox_sync_warm_proof_on_duration_change
+    alias: "Doughbox - Sync Warm Proof When Duration Changes"
+    trigger:
+      - platform: state
+        entity_id: input_number.doughbox_warm_proof_hours
+    action:
+      - action: input_datetime.set_datetime
+        entity_id: input_datetime.doughbox_warm_proof_end
+        data:
+          datetime: >
+            {% set cf_end = states('input_datetime.doughbox_cold_ferment_end') %}
+            {% set end_ts = as_timestamp(cf_end) + (states('input_number.doughbox_warm_proof_hours') | float * 3600) %}
+            {{ end_ts | timestamp_custom('%Y-%m-%d %H:%M:%S') }}
+
+  # ── CF end → transition to Warm Proof via MQTT ─────────────────────
+  - id: doughbox_cold_ferment_end
+    alias: "Doughbox - Cold Ferment End → Warm Proof"
+    trigger:
+      - platform: time
+        at: input_datetime.doughbox_cold_ferment_end
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: state
+        entity_id: input_boolean.doughbox_schedule_active
+        state: "on"
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: "Cold Ferment"
+      - condition: template
+        value_template: >
+          {{ now() >= states('input_datetime.doughbox_cold_ferment_end')
+             | as_datetime | as_local }}
+    action:
+      - action: input_select.select_option
+        entity_id: input_select.doughbox_current_phase
+        data:
+          option: "Warm Proof"
+      # Stop first — lets the compressor drop out so the interlock clears
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: '{"cmd":"stop"}'
+          retain: false
+      - delay:
+          seconds: 15
+      # Now start WP — compressor is off, heater is free to energise
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+             "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+          retain: false
+
+  # ── WP end → Complete, stop controller via MQTT ────────────────────
+  - id: doughbox_warm_proof_end
+    alias: "Doughbox - Warm Proof End → Complete"
+    trigger:
+      - platform: time
+        at: input_datetime.doughbox_warm_proof_end
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: state
+        entity_id: input_boolean.doughbox_schedule_active
+        state: "on"
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: "Warm Proof"
+      - condition: template
+        value_template: >
+          {{ now() >= states('input_datetime.doughbox_warm_proof_end')
+             | as_datetime | as_local }}
+    action:
+      - action: input_select.select_option
+        entity_id: input_select.doughbox_current_phase
+        data:
+          option: "Complete"
+      - action: input_boolean.turn_off
+        entity_id: input_boolean.doughbox_schedule_active
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: '{"cmd":"stop"}'
+          retain: false
+
+  # ── Safety shutoff at 40°C for 5 minutes ──────────────────────────
+  - id: doughbox_safety_shutoff
+    alias: "Doughbox - Safety Shutoff"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.doughbox_temperature_average
+        above: 40
+        for:
+          minutes: 5
+    action:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: '{"cmd":"stop"}'
+          retain: false
+      - action: notify.persistent_notification
+        data:
+          title: "⚠️ Doughbox Safety Shutoff"
+          message: "Temperature exceeded 40°C for 5 minutes. System shut down."
+
+  # ── Live update: push new CF temp to controller while running ──────
+  - id: doughbox-cf-temp-live-update
+    alias: "Doughbox - CF Temp Live Update"
+    trigger:
+      - platform: state
+        entity_id: input_number.doughbox_cold_ferment_temp
+    condition:
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: Cold Ferment
+    action:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_cold_ferment_temp') | float }},
+             "high":{{ (states('input_number.doughbox_cold_ferment_temp') | float) + 2 }}}
+          retain: false
+    mode: single
+
+  # ── Live update: push new WP temp to controller while running ──────
+  - id: doughbox-wp-temp-live-update
+    alias: "Doughbox - WP Temp Live Update"
+    trigger:
+      - platform: state
+        entity_id: input_number.doughbox_warm_proof_temp
+    condition:
+      - condition: state
+        entity_id: input_select.doughbox_current_phase
+        state: Warm Proof
+    action:
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+             "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+          retain: false
+    mode: single
+
+script:
+  # ── Start Cold Ferment ─────────────────────────────────────────────
+  doughbox_start_fermentation:
+    alias: "Doughbox - Start Fermentation"
+    sequence:
+      - action: input_boolean.turn_on
+        entity_id: input_boolean.doughbox_schedule_active
+      - action: input_select.select_option
+        entity_id: input_select.doughbox_current_phase
+        data:
+          option: "Cold Ferment"
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_cold_ferment_temp') | float }},
+             "high":{{ (states('input_number.doughbox_cold_ferment_temp') | float) + 2 }}}
+          retain: false
+    mode: single
+
+  # ── Skip directly to Warm Proof ────────────────────────────────────
+  # Reads wp_temp and wp_hours from input_number helpers — no hardcoded values.
+  # Sends a stop first so the compressor drops out before the heater tries
+  # to energise — without this the interlock blocks the heater on CF→WP
+  # transitions where the compressor is still running.
+  doughbox_skip_to_room_temp_proof:
+    alias: "Doughbox - Skip to Room Temp Proof"
+    sequence:
+      - action: input_boolean.turn_on
+        entity_id: input_boolean.doughbox_schedule_active
+      - action: input_select.select_option
+        entity_id: input_select.doughbox_current_phase
+        data:
+          option: "Warm Proof"
+      - action: input_datetime.set_datetime
+        entity_id: input_datetime.doughbox_warm_proof_end
+        data:
+          datetime: >-
+            {{ (now().timestamp() + states('input_number.doughbox_warm_proof_hours') | float * 3600)
+               | timestamp_custom('%Y-%m-%d %H:%M:%S') }}
+      # Stop first — lets the compressor drop out so the interlock clears
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: '{"cmd":"stop"}'
+          retain: false
+      - delay:
+          seconds: 15
+      # Now start WP — compressor is off, heater is free to energise
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: >-
+            {"cmd":"start",
+             "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+             "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+          retain: false
+    mode: single
+
+  # ── Stop everything ────────────────────────────────────────────────
+  doughbox_stop:
+    alias: "Doughbox - Stop"
+    sequence:
+      - action: input_boolean.turn_off
+        entity_id: input_boolean.doughbox_schedule_active
+      - action: input_select.select_option
+        entity_id: input_select.doughbox_current_phase
+        data:
+          option: "Idle"
+      - action: mqtt.publish
+        data:
+          topic: doughbox/cmd
+          payload: '{"cmd":"stop"}'
+          retain: false
+    mode: single
+
+  # ── Reset to next Saturday 12:00 schedule ─────────────────────────
+  doughbox_set_defaults:
+    alias: "Doughbox - Set Defaults (Saturday 12:00)"
+    sequence:
+      - action: input_datetime.set_datetime
+        entity_id: input_datetime.doughbox_cold_ferment_end
+        data:
+          datetime: >
+            {% set today = now().date() %}
+            {% set days_until_saturday = (5 - today.weekday()) % 7 %}
+            {% if days_until_saturday == 0 and now().hour >= 12 %}
+              {% set days_until_saturday = 7 %}
+            {% endif %}
+            {% set target_date = today + timedelta(days=days_until_saturday) %}
+            {{ target_date.strftime('%Y-%m-%d') }} 12:00:00
+      - delay:
+          milliseconds: 500
+      - action: input_datetime.set_datetime
+        entity_id: input_datetime.doughbox_warm_proof_end
+        data:
+          datetime: >
+            {% set cf_end = states('input_datetime.doughbox_cold_ferment_end') %}
+            {% set end_ts = as_timestamp(cf_end) + (states('input_number.doughbox_warm_proof_hours') | float * 3600) %}
+            {{ end_ts | timestamp_custom('%Y-%m-%d %H:%M:%S') }}
+    mode: single
