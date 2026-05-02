@@ -1,0 +1,103 @@
+# scripts_doughbox.yaml
+# ─────────────────────────────────────────────────────────────────────
+# Doughbox HA script definitions.
+# Paste/merge into your scripts.yaml or HA package file.
+# All four scripts now read from input_number / input_datetime helpers
+# rather than using hardcoded values.
+# ─────────────────────────────────────────────────────────────────────
+
+doughbox_start_fermentation:
+  alias: Doughbox - Start Cold Ferment
+  description: >
+    Sets phase to Cold Ferment, activates the schedule, and sends the
+    configured CF target temperature to the controller via MQTT.
+  sequence:
+    - action: input_select.select_option
+      data:
+        entity_id: input_select.doughbox_current_phase
+        option: Cold Ferment
+    - action: input_boolean.turn_on
+      data:
+        entity_id: input_boolean.doughbox_schedule_active
+    - action: mqtt.publish
+      data:
+        topic: doughbox/cmd
+        payload: >-
+          {"cmd":"start",
+           "low":{{ states('input_number.doughbox_cold_ferment_temp') | float }},
+           "high":{{ (states('input_number.doughbox_cold_ferment_temp') | float) + 2 }}}
+        retain: false
+  mode: single
+
+doughbox_skip_to_room_temp_proof:
+  alias: Doughbox - Skip to RT Proof
+  description: >
+    Transitions immediately to Warm Proof, calculating the WP end time
+    from the current moment plus doughbox_warm_proof_hours, and sending
+    the configured WP target temperature to the controller via MQTT.
+    Previously this script used hardcoded 24°C / 4 h — it now reads
+    from the input_number helpers so your schedule settings are respected.
+  sequence:
+    - action: input_select.select_option
+      data:
+        entity_id: input_select.doughbox_current_phase
+        option: Warm Proof
+    - action: input_datetime.set_datetime
+      data:
+        entity_id: input_datetime.doughbox_warm_proof_end
+        datetime: >-
+          {{ (now() + timedelta(hours=states('input_number.doughbox_warm_proof_hours') | float)).strftime('%Y-%m-%d %H:%M:%S') }}
+    - action: mqtt.publish
+      data:
+        topic: doughbox/cmd
+        payload: >-
+          {"cmd":"start",
+           "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+           "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+        retain: false
+  mode: single
+
+doughbox_stop:
+  alias: Doughbox - Stop
+  description: >
+    Stops fermentation: sets phase to Idle, deactivates the schedule,
+    and sends a stop command to the controller via MQTT.
+  sequence:
+    - action: input_select.select_option
+      data:
+        entity_id: input_select.doughbox_current_phase
+        option: Idle
+    - action: input_boolean.turn_off
+      data:
+        entity_id: input_boolean.doughbox_schedule_active
+    - action: mqtt.publish
+      data:
+        topic: doughbox/cmd
+        payload: '{"cmd":"stop"}'
+        retain: false
+  mode: single
+
+doughbox_set_defaults:
+  alias: Doughbox - Set Weekend Defaults
+  description: >
+    Resets CF end to next Saturday 12:00 and calculates WP end from
+    that time plus the configured warm proof duration.
+  sequence:
+    - action: input_datetime.set_datetime
+      data:
+        entity_id: input_datetime.doughbox_cold_ferment_end
+        datetime: >-
+          {% set today = now() %}
+          {% set days_ahead = (5 - today.weekday()) % 7 %}
+          {% if days_ahead == 0 %}{% set days_ahead = 7 %}{% endif %}
+          {{ (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d') }} 12:00:00
+    - action: input_datetime.set_datetime
+      data:
+        entity_id: input_datetime.doughbox_warm_proof_end
+        datetime: >-
+          {% set today = now() %}
+          {% set days_ahead = (5 - today.weekday()) % 7 %}
+          {% if days_ahead == 0 %}{% set days_ahead = 7 %}{% endif %}
+          {% set cf_end = (today + timedelta(days=days_ahead)).replace(hour=12, minute=0, second=0, microsecond=0) %}
+          {{ (cf_end + timedelta(hours=states('input_number.doughbox_warm_proof_hours') | float)).strftime('%Y-%m-%d %H:%M:%S') }}
+  mode: single
