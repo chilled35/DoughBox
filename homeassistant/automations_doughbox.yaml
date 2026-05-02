@@ -287,3 +287,51 @@
       data:
         tag: doughbox-sensor-fail
   mode: single
+
+- id: 'doughbox-cf-temp-live-update'
+  alias: Doughbox - CF Temp Live Update
+  description: >
+    When doughbox_cold_ferment_temp changes while Cold Ferment is the
+    active phase, immediately re-publishes the MQTT start command with
+    the new setpoint so the controller responds without interruption.
+  triggers:
+    - trigger: state
+      entity_id: input_number.doughbox_cold_ferment_temp
+  conditions:
+    - condition: state
+      entity_id: input_select.doughbox_current_phase
+      state: Cold Ferment
+  actions:
+    - action: mqtt.publish
+      data:
+        topic: doughbox/cmd
+        payload: >-
+          {"cmd":"start",
+           "low":{{ states('input_number.doughbox_cold_ferment_temp') | float }},
+           "high":{{ (states('input_number.doughbox_cold_ferment_temp') | float) + 2 }}}
+        retain: false
+  mode: single
+
+- id: 'doughbox-wp-temp-live-update'
+  alias: Doughbox - WP Temp Live Update
+  description: >
+    When doughbox_warm_proof_temp changes while Warm Proof is the
+    active phase, immediately re-publishes the MQTT start command with
+    the new setpoint so the controller responds without interruption.
+  triggers:
+    - trigger: state
+      entity_id: input_number.doughbox_warm_proof_temp
+  conditions:
+    - condition: state
+      entity_id: input_select.doughbox_current_phase
+      state: Warm Proof
+  actions:
+    - action: mqtt.publish
+      data:
+        topic: doughbox/cmd
+        payload: >-
+          {"cmd":"start",
+           "low":{{ states('input_number.doughbox_warm_proof_temp') | float }},
+           "high":{{ (states('input_number.doughbox_warm_proof_temp') | float) + 2 }}}
+        retain: false
+  mode: single
