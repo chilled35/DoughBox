@@ -236,7 +236,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-mono);font-si
           <div class="schedule-row"><label>❄ Cold Ferment ends</label><div class="input-group"><input type="datetime-local" id="cf-end" onchange="setCfEnd()"></div></div>
           <div class="schedule-row"><label>❄ CF target temp</label><div class="num-box"><button onclick="stepNum('cf-temp',-1)">−</button><input type="number" id="cf-temp" min="2" max="10" step="1" value="3" onchange="setCfTemp()"><span class="unit">°C</span><button onclick="stepNum('cf-temp',1)">+</button></div></div>
           <div class="schedule-row"><label>🔥 RT proof ends</label><div class="input-group"><input type="datetime-local" id="wp-end" onchange="setWpEnd()"></div></div>
-          <div class="schedule-row"><label>🔥 RT target temp</label><div class="num-box"><button onclick="stepNum('wp-temp',-1)">−</button><input type="number" id="wp-temp" min="20" max="35" step="1" value="24" onchange="setWpTemp()"><span class="unit">°C</span><button onclick="stepNum('wp-temp',1)">+</button></div></div>
+          <div class="schedule-row"><label>🔥 RT target temp</label><div class="num-box"><button onclick="stepNum('wp-temp',-1)">−</button><input type="number" id="wp-temp" min="20" max="30" step="1" value="24" onchange="setWpTemp()"><span class="unit">°C</span><button onclick="stepNum('wp-temp',1)">+</button></div></div>
           <div class="schedule-row"><label>🔥 RT duration</label><div class="num-box"><button onclick="stepNum('wp-hours',-0.5)">−</button><input type="number" id="wp-hours" min="1" max="8" step="0.5" value="4" onchange="setWpHours()"><span class="unit">hrs</span><button onclick="stepNum('wp-hours',0.5)">+</button></div></div>
           <div class="schedule-row"><label>💧 Target humidity</label><div class="num-box"><button onclick="stepNum('hum-target',-5)">−</button><input type="number" id="hum-target" min="40" max="85" step="5" value="70" onchange="setHumidity()"><span class="unit">%</span><button onclick="stepNum('hum-target',5)">+</button></div></div>
         </div>
@@ -573,11 +573,21 @@ function setRelay(btnId, lblId, state) {
 async function togglePower(on) { await haSet('switch.appliance_doughboxpower', on ? 'on' : 'off'); toast(on ? 'Doughbox powered on' : 'Doughbox powered off'); setTimeout(refresh, 1000); }
 async function toggleRelay(entity) { const s = await haGet(`switch.${entity}`); await haSet(`switch.${entity}`, s.state === 'on' ? 'off' : 'on'); setTimeout(refresh, 800); }
 async function callScript(name) { await haService('script', name); toast(`Script: ${name.replace(/_/g,' ')}`); setTimeout(refresh, 1500); }
+
+// ── MANUAL CLIMATE ────────────────────────────────────────────────────
+// FIX: ESPHome thermostats don't reliably accept hvac_mode bundled into
+// set_temperature. Split into two sequential calls: set_hvac_mode first
+// to change mode, then set_temperature to apply the setpoints.
 async function setClimate(mode, low, high) {
-  if (mode === 'off') await haService('climate', 'set_hvac_mode', { entity_id: 'climate.doughbox_climate', hvac_mode: 'off' });
-  else await haService('climate', 'set_temperature', { entity_id: 'climate.doughbox_climate', hvac_mode: mode, target_temp_low: low, target_temp_high: high });
+  if (mode === 'off') {
+    await haService('climate', 'set_hvac_mode', { entity_id: 'climate.doughbox_climate', hvac_mode: 'off' });
+  } else {
+    await haService('climate', 'set_hvac_mode', { entity_id: 'climate.doughbox_climate', hvac_mode: mode });
+    await haService('climate', 'set_temperature', { entity_id: 'climate.doughbox_climate', target_temp_low: low, target_temp_high: high });
+  }
   toast('Climate updated'); setTimeout(refresh, 1000);
 }
+
 function stepNum(id, step) {
   const el = document.getElementById(id), min = parseFloat(el.min), max = parseFloat(el.max);
   el.value = Math.min(max, Math.max(min, parseFloat(el.value) + step));
