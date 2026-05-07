@@ -1,1 +1,8 @@
-Just a folder of images from from the project.
+# Photos
+
+| | | |
+|:---:|:---:|:---:|
+| [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/2.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/2.jpeg) | [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7279.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7279.jpeg) | [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7289.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7289.jpeg) |
+| [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7290.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7290.jpeg) | [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7291.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7291.jpeg) | [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7292.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7292.jpeg) |
+| [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7302.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7302.jpeg) | [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7332.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7332.jpeg) | [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/IMG_7345.jpeg)](https://github.com/chilled35/DoughBox/blob/main/photos/IMG_7345.jpeg) |
+| [![](https://raw.githubusercontent.com/chilled35/DoughBox/main/photos/Screenshot%202026-05-07%20at%2015.49.45.png)](https://github.com/chilled35/DoughBox/blob/main/photos/Screenshot%202026-05-07%20at%2015.49.45.png) | | |
